@@ -11,15 +11,20 @@ Each environment is a flat list of name/value pairs. Substitution looks
 for the ``{{name}}`` token (alphanumeric + underscore + dash, optional
 whitespace inside the braces) and replaces with the value, or leaves the
 token in place if the variable isn't defined.
+
+Built-in template functions start with ``$``: ``{{$timestamp}}``,
+``{{$uuid}}``, ``{{$isoDate}}``, ``{{$randomInt}}``.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import random
 import re
 import tempfile
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -29,7 +34,21 @@ from .storage import home_dir
 
 
 # Allow {{ name }} or {{name}}; identifiers match what users typically pick.
-_VAR_PATTERN = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_-]*)\s*\}\}")
+# Also matches $-prefixed built-in functions like {{$uuid}}.
+_VAR_PATTERN = re.compile(r"\{\{\s*(\$?[A-Za-z_][A-Za-z0-9_-]*)\s*\}\}")
+
+
+def _builtin(name: str) -> str | None:
+    """Evaluate a built-in $-function. Returns None if unknown."""
+    if name == "$timestamp":
+        return str(int(datetime.now(tz=timezone.utc).timestamp() * 1000))
+    if name == "$isoDate":
+        return datetime.now(tz=timezone.utc).isoformat()
+    if name == "$uuid":
+        return str(uuid.uuid4())
+    if name == "$randomInt":
+        return str(random.randint(0, 1_000_000))
+    return None
 
 
 class EnvVariable(BaseModel):
@@ -120,13 +139,16 @@ def delete(env_id: str) -> bool:
 
 def substitute(text: str, env: Environment | None) -> str:
     """Replace every ``{{var}}`` in ``text`` with the matching enabled
-    variable's value. Unknown or disabled vars are left as-is."""
-    if env is None:
-        return text
-    lookup = {v.name: v.value for v in env.variables if v.enabled}
+    variable's value or built-in function result. Unknown or disabled
+    vars are left as-is."""
+    lookup = {v.name: v.value for v in env.variables if v.enabled} if env else {}
 
     def _sub(m: re.Match[str]) -> str:
         name = m.group(1)
+        if name.startswith("$"):
+            result = _builtin(name)
+            if result is not None:
+                return result
         return lookup.get(name, m.group(0))
 
     return _VAR_PATTERN.sub(_sub, text)
