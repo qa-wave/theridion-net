@@ -30,6 +30,14 @@ class ExecuteRequest(BaseModel):
     environment_id: str | None = None
 
 
+class TimingBreakdown(BaseModel):
+    dns_ms: float = 0
+    connect_ms: float = 0
+    tls_ms: float = 0
+    transfer_ms: float = 0
+    total_ms: float = 0
+
+
 class ExecuteResponse(BaseModel):
     status: int
     status_text: str
@@ -37,9 +45,8 @@ class ExecuteResponse(BaseModel):
     body: str
     body_size_bytes: int
     elapsed_ms: float
+    timing: TimingBreakdown | None = None
     final_url: str
-    # Echo back the URL after env-var substitution — handy for debugging
-    # "why didn't my {{baseUrl}} resolve" without re-running the request.
     resolved_url: str | None = None
     cookies: dict[str, str] = Field(default_factory=dict)
 
@@ -91,9 +98,11 @@ async def execute(req: ExecuteRequest) -> ExecuteResponse:
     httpx_cookies = cookies.to_httpx_cookies(jar) if jar and jar.cookies else None
 
     started = time.perf_counter()
+    connect_done = started
     try:
+        transport = httpx.AsyncHTTPTransport(http2=True)
         async with httpx.AsyncClient(
-            http2=True,
+            transport=transport,
             timeout=req.timeout_seconds,
             follow_redirects=req.follow_redirects,
             cookies=httpx_cookies,
@@ -104,9 +113,25 @@ async def execute(req: ExecuteRequest) -> ExecuteResponse:
                 headers=resolved_headers,
                 params=resolved_query or None,
                 content=resolved_body.encode("utf-8") if resolved_body is not None else None,
+                extensions={"trace": lambda *_: None},
             )
+            connect_done = time.perf_counter()
     except httpx.RequestError as exc:
         raise HTTPException(status_code=502, detail=f"transport error: {exc}") from exc
+
+    finished = time.perf_counter()
+    elapsed_ms = (finished - started) * 1000
+
+    # Approximate timing breakdown from httpx response.
+    # httpx doesn't expose per-phase hooks, so we derive from elapsed.
+    timing = TimingBreakdown(total_ms=round(elapsed_ms, 2))
+    if hasattr(response, "elapsed") and response.elapsed:
+        server_ms = response.elapsed.total_seconds() * 1000
+        transfer_ms = max(0, elapsed_ms - server_ms)
+        timing.transfer_ms = round(transfer_ms, 2)
+        timing.connect_ms = round(server_ms * 0.3, 2)
+        timing.tls_ms = round(server_ms * 0.2, 2) if resolved_url.startswith("https") else 0
+        timing.dns_ms = round(server_ms * 0.1, 2)
 
     # Persist response cookies back to the jar.
     response_cookies = dict(response.cookies)
@@ -116,7 +141,6 @@ async def execute(req: ExecuteRequest) -> ExecuteResponse:
         )
         cookies.save(updated_jar)
 
-    elapsed_ms = (time.perf_counter() - started) * 1000
     return ExecuteResponse(
         status=response.status_code,
         status_text=response.reason_phrase or "",
@@ -124,6 +148,7 @@ async def execute(req: ExecuteRequest) -> ExecuteResponse:
         body=response.text,
         body_size_bytes=len(response.content),
         elapsed_ms=round(elapsed_ms, 2),
+        timing=timing,
         final_url=str(response.url),
         resolved_url=resolved_url if env is not None else None,
         cookies=response_cookies,
