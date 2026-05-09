@@ -77,6 +77,7 @@ def save_request(collection_id: str, body: SaveRequestInput) -> Collection:
         url=body.url,
         headers=body.headers,
         body=body.body,
+        auth=body.auth,
     )
     try:
         return storage.add_request(collection_id, req, body.parent_folder_id)

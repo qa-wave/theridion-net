@@ -16,6 +16,23 @@ HttpMethod = Literal[
     "GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"
 ]
 
+AuthType = Literal["none", "bearer", "basic", "apikey"]
+
+
+class AuthConfig(BaseModel):
+    """Authentication configuration attached to a request."""
+
+    type: AuthType = "none"
+    # Bearer
+    token: str | None = None
+    # Basic
+    username: str | None = None
+    password: str | None = None
+    # API Key
+    key: str | None = None
+    value: str | None = None
+    add_to: Literal["header", "query"] = "header"
+
 
 class CollectionItem(BaseModel):
     """Either a folder (is_folder=True, has child items) or a request."""
@@ -27,6 +44,7 @@ class CollectionItem(BaseModel):
     url: str | None = None
     headers: dict[str, str] = Field(default_factory=dict)
     body: str | None = None
+    auth: AuthConfig | None = None
     # Folder-specific field (populated when is_folder=True).
     items: list["CollectionItem"] = Field(default_factory=list)
 
@@ -68,4 +86,5 @@ class SaveRequestInput(BaseModel):
     url: str = Field(..., min_length=1)
     headers: dict[str, str] = Field(default_factory=dict)
     body: str | None = None
+    auth: AuthConfig | None = None
     parent_folder_id: str | None = None

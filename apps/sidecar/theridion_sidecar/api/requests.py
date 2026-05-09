@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import time
 from typing import Literal
 
@@ -10,6 +11,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from .. import environments
+from ..models import AuthConfig
 
 router = APIRouter(prefix="/api/requests", tags=["requests"])
 
@@ -22,6 +24,7 @@ class ExecuteRequest(BaseModel):
     headers: dict[str, str] = Field(default_factory=dict)
     query: dict[str, str] = Field(default_factory=dict)
     body: str | None = None
+    auth: AuthConfig | None = None
     timeout_seconds: float = Field(default=30.0, gt=0, le=300)
     follow_redirects: bool = True
     environment_id: str | None = None
@@ -40,6 +43,31 @@ class ExecuteResponse(BaseModel):
     resolved_url: str | None = None
 
 
+def _apply_auth(
+    auth: AuthConfig,
+    headers: dict[str, str],
+    query: dict[str, str],
+    env: environments.Environment | None,
+) -> None:
+    """Mutate *headers* or *query* in place to inject auth credentials."""
+    sub = lambda v: environments.substitute(v, env) if v else ""  # noqa: E731
+    if auth.type == "bearer":
+        headers["Authorization"] = f"Bearer {sub(auth.token)}"
+    elif auth.type == "basic":
+        creds = base64.b64encode(
+            f"{sub(auth.username)}:{sub(auth.password)}".encode()
+        ).decode()
+        headers["Authorization"] = f"Basic {creds}"
+    elif auth.type == "apikey":
+        key = sub(auth.key)
+        value = sub(auth.value)
+        if key:
+            if auth.add_to == "query":
+                query[key] = value
+            else:
+                headers[key] = value
+
+
 @router.post("/execute", response_model=ExecuteResponse)
 async def execute(req: ExecuteRequest) -> ExecuteResponse:
     # Resolve {{var}} placeholders against the chosen environment, if any.
@@ -52,6 +80,10 @@ async def execute(req: ExecuteRequest) -> ExecuteResponse:
         environments.substitute(req.body, env) if req.body is not None else None
     )
     resolved_query = environments.substitute_dict(req.query, env)
+
+    # Inject authentication into headers/query.
+    if req.auth and req.auth.type != "none":
+        _apply_auth(req.auth, resolved_headers, resolved_query, env)
 
     started = time.perf_counter()
     try:
