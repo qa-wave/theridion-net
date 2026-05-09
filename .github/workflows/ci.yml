@@ -78,6 +78,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev
 
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.9.x"
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.13
+
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -94,6 +103,18 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+
+      - name: Build sidecar binary (PyInstaller)
+        if: runner.os != 'Windows'
+        working-directory: apps/sidecar
+        shell: bash
+        run: bash scripts/build-bundle.sh
+
+      - name: Build sidecar binary (Windows)
+        if: runner.os == 'Windows'
+        working-directory: apps/sidecar
+        shell: bash
+        run: bash scripts/build-bundle.sh
 
       - name: Cargo cache
         uses: Swatinem/rust-cache@v2
