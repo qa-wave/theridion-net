@@ -7,6 +7,8 @@ import uuid
 from fastapi import APIRouter, HTTPException
 
 from .. import storage
+from pydantic import BaseModel, Field
+
 from ..models import (
     Collection,
     CollectionItem,
@@ -81,6 +83,38 @@ def save_request(collection_id: str, body: SaveRequestInput) -> Collection:
     )
     try:
         return storage.add_request(collection_id, req, body.parent_folder_id)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+
+class RenameInput(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+
+
+class MoveInput(BaseModel):
+    target_folder_id: str | None = None
+
+
+@router.patch("/{collection_id}", response_model=Collection)
+def rename_collection(collection_id: str, body: RenameInput) -> Collection:
+    try:
+        return storage.rename_collection(collection_id, body.name)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+
+@router.patch("/{collection_id}/items/{item_id}/rename", response_model=Collection)
+def rename_item(collection_id: str, item_id: str, body: RenameInput) -> Collection:
+    try:
+        return storage.rename_item(collection_id, item_id, body.name)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+
+@router.patch("/{collection_id}/items/{item_id}/move", response_model=Collection)
+def move_item(collection_id: str, item_id: str, body: MoveInput) -> Collection:
+    try:
+        return storage.move_item(collection_id, item_id, body.target_folder_id)
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
 

@@ -167,6 +167,44 @@ def delete_folder(collection_id: str, folder_id: str) -> Collection:
     return coll
 
 
+def rename_collection(collection_id: str, name: str) -> Collection:
+    coll = get(collection_id)
+    if coll is None:
+        raise FileNotFoundError(f"collection {collection_id} not found")
+    coll.name = name
+    _atomic_write(coll)
+    return coll
+
+
+def rename_item(collection_id: str, item_id: str, name: str) -> Collection:
+    """Rename a request or folder inside a collection."""
+    coll = get(collection_id)
+    if coll is None:
+        raise FileNotFoundError(f"collection {collection_id} not found")
+    if not _rename_by_id(coll.items, item_id, name):
+        raise FileNotFoundError(f"item {item_id} not found")
+    _atomic_write(coll)
+    return coll
+
+
+def move_item(
+    collection_id: str, item_id: str, target_folder_id: str | None,
+) -> Collection:
+    """Move a request or folder to a different parent (or root if None)."""
+    coll = get(collection_id)
+    if coll is None:
+        raise FileNotFoundError(f"collection {collection_id} not found")
+    item = _extract_by_id(coll.items, item_id)
+    if item is None:
+        raise FileNotFoundError(f"item {item_id} not found")
+    target = _find_folder(coll.items, target_folder_id) if target_folder_id else None
+    if target_folder_id and target is None:
+        raise FileNotFoundError(f"folder {target_folder_id} not found")
+    (target.items if target else coll.items).append(item)
+    _atomic_write(coll)
+    return coll
+
+
 def delete_collection(collection_id: str) -> bool:
     p = _path_for(collection_id)
     if not p.exists():
@@ -202,6 +240,28 @@ def _replace_by_id(
         if it.is_folder and _replace_by_id(it.items, replacement):
             return True
     return False
+
+
+def _rename_by_id(items: list[CollectionItem], item_id: str, name: str) -> bool:
+    for it in items:
+        if it.id == item_id:
+            it.name = name
+            return True
+        if it.is_folder and _rename_by_id(it.items, item_id, name):
+            return True
+    return False
+
+
+def _extract_by_id(items: list[CollectionItem], item_id: str) -> CollectionItem | None:
+    """Remove an item from the tree and return it."""
+    for i, it in enumerate(items):
+        if it.id == item_id:
+            return items.pop(i)
+        if it.is_folder:
+            found = _extract_by_id(it.items, item_id)
+            if found is not None:
+                return found
+    return None
 
 
 def _delete_by_id(items: list[CollectionItem], item_id: str) -> bool:
