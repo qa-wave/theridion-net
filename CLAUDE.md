@@ -256,9 +256,13 @@ cd apps/desktop/src-tauri && cargo test --lib
 
 ## Co je hotovo (status k 2026-05-09)
 
-Commitů na `main`:
+Commitů na `main` (nejnovější nahoře):
 
 ```
+961a6fd Cookie jar: persist cookies across requests per environment
+5251dca cURL import + Copy as cURL: bidirectional conversion
+ffa0be7 Auth helpers: Bearer, Basic, API Key with env-var substitution
+02c329a Update CLAUDE.md: orientation block + status snapshot for CLI handoff
 b641c81 Add CLAUDE.md — project context for future Claude sessions
 09e49dd Tauri sidecar bundling: PyInstaller + spawn + dynamic port handshake
 7c054f4 Playwright E2E suite + loopback CORS regex
@@ -286,8 +290,16 @@ cf401e1 Sidecar polish: diagnostics endpoint + PID tracking
 ✅ Sidecar diagnostics endpoint + PID file  
 ✅ PyInstaller bundling + Tauri sidecar spawn + port handshake  
 ✅ CLAUDE.md kontext pro další session  
+✅ **Sprint 1 — Auth helpers** (Bearer, Basic, API Key) s `{{var}}`
+   substitucí přes env. (OAuth2, AWS SigV4, NTLM zatím ne.)  
+✅ **Sprint 1 — cURL import + "Copy as cURL"** bidirekcionálně  
+✅ **Sprint 1 — Cookies jar** per-environment persistence  
+🟡 **Sprint 1 — Inline rename + drag-drop** rozdělané (uncommitted
+   k 2026-05-09: `Sidebar.tsx`, `lib/sidecar.ts`, `storage.py`,
+   `api/collections.py` — `rename_collection`, `rename_item`,
+   `move_item`, Pencil ikona v Sidebar). Sprint 1 = ~85 % hotovo.  
 
-### Test status (lokálně, 2026-05-09)
+### Test status (před Sprint 1 commity, 2026-05-09)
 
 | Suite | Počet | Čas | Stav |
 |---|---|---|---|
@@ -296,6 +308,11 @@ cf401e1 Sidecar polish: diagnostics endpoint + PID tracking
 | Frontend typecheck (`pnpm typecheck`) | — | < 5 s | 🟢 |
 | Frontend build (`pnpm build`) | — | ~1 s | 🟢 (~225 KB JS / 68 KB gz) |
 | Playwright E2E | 7 | ~9 s | 🟢 |
+
+> ⚠️ Po Sprint 1 commitech (`ffa0be7`/`5251dca`/`961a6fd`) ani po
+> rozdělaných rename/move změnách nikdo testy ještě znovu nespustil.
+> **První akce CLI session:** projet test trio z [orientation
+> bloku](#než-cokoli-uděláš--orientace) a fixnout, co padlo.
 
 ### Co ještě nebylo v CI ověřeno
 
@@ -326,13 +343,14 @@ cf401e1 Sidecar polish: diagnostics endpoint + PID tracking
 
 ## Roadmapa (po dokončení A)
 
-### Sprint 1 — credibility (table stakes)
-1. **Auth helpers** — Bearer, Basic, OAuth2, API Key, AWS SigV4
-   (Auth tab v `RequestPanel.tsx` je teď stub).
-2. **Cookies jar** — `httpx.AsyncClient(cookies=...)` + persistovat
-   napříč requesty per env.
-3. **cURL import + "Copy as cURL"** — bidirekcionální.
-4. **Inline rename** + drag-drop v sidebaru (teď `prompt()`, fuj).
+### Sprint 1 — credibility (table stakes) — **probíhá**
+1. ✅ **Auth helpers** (Bearer/Basic/API Key) — commit `ffa0be7`.
+   OAuth2 / AWS SigV4 / NTLM zbývají.
+2. ✅ **Cookies jar** — commit `961a6fd`.
+3. ✅ **cURL import + "Copy as cURL"** — commit `5251dca`.
+4. 🟡 **Inline rename + drag-drop** — rozdělané, viz uncommitted
+   diff. Backend (`storage.rename_collection`/`rename_item`/`move_item`
+   + endpointy) a Sidebar UI (Pencil ikona) jsou v práci.
 
 ### Sprint 2 — automation (Playwright-style)
 5. **Tests/Asserts** — declarative DSL (status, JSON path, response
