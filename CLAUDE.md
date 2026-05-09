@@ -6,6 +6,43 @@ performance + security testing v jednom desktop nástroji. Jméno z rodu
 pavouků *Theridion*, kteří staví nepravidelné 3D cobweby — metafora pro
 zamotané závislosti API.
 
+## Než cokoli uděláš — orientace
+
+Pokud jsi nová session, projdi tenhle checklist:
+
+```bash
+# 1. Kde jsme v historii
+git -C /Users/tm/workspaces/projects/theridion log --oneline | head
+
+# 2. Sidecar testy zelené?
+cd /Users/tm/workspaces/projects/theridion/apps/sidecar && uv run pytest -q
+
+# 3. Frontend typecheck + Playwright E2E
+cd /Users/tm/workspaces/projects/theridion/apps/desktop && pnpm typecheck
+cd /Users/tm/workspaces/projects/theridion/apps/desktop && pnpm test:e2e
+
+# 4. Rust unit testy pro sidecar handshake
+cd /Users/tm/workspaces/projects/theridion/apps/desktop/src-tauri && cargo test --lib
+```
+
+Když je všechno zelené, koukni do **"Co je hotovo"** dole + **"Roadmapa"**
+a zeptej se uživatele, jestli pokračuje podle plánu nebo má nový směr.
+Pokud něco selže, oprav nejdřív to — než přidáš novou funkci.
+
+**První lokální spuštění aplikace** (jednou per checkout):
+
+```bash
+cd /Users/tm/workspaces/projects/theridion/apps/desktop
+pnpm install
+pnpm sidecar:bundle    # PyInstaller build sidecaru → ~1 min, ~26 MB binárka
+pnpm tauri dev         # ~2 min první cargo compile, pak otevře okno
+```
+
+Po Python změně musíš `pnpm sidecar:bundle` spustit znovu, jinak Tauri
+spawne starou bundlovanou binárku. Pro fast Python iter použij
+**standalone sidecar** (viz [Časté příkazy](#časté-příkazy)) + browser
+tab na 1420.
+
 ## Pracovní styl
 
 Postupuj přímo k řešení. Pokud potřebuješ použít nástroj, analyzovat
@@ -17,6 +54,12 @@ Playwright E2E. Nikdy nespoléhej na "build prošel = funguje" —
 TypeScript a cargo prošly i v session, kdy backend/frontend ve
 skutečnosti zlobil (CORS, ESM, nesprávný locator). E2E suite tyhle
 chyby chytá.
+
+**Před commitem:** projeď test trio (pytest, typecheck, e2e) +
+`git status -s` (žádné `binaries/`, `__pycache__/`, `dist/`,
+`.venv/`, `*.tsbuildinfo` ve staging). Commit zprávy v angličtině,
+formát "Subject (max 70 chars)\n\nBody (proč, ne jen co)\n\n
+Co-Authored-By trailer". Atomic — jeden concern jeden commit.
 
 ## Architektura
 
@@ -213,6 +256,24 @@ cd apps/desktop/src-tauri && cargo test --lib
 
 ## Co je hotovo (status k 2026-05-09)
 
+Commitů na `main`:
+
+```
+b641c81 Add CLAUDE.md — project context for future Claude sessions
+09e49dd Tauri sidecar bundling: PyInstaller + spawn + dynamic port handshake
+7c054f4 Playwright E2E suite + loopback CORS regex
+90a432c SOAP / WSDL: zeep-backed inspect + execute, modal UI
+bfb4660 Monaco editor for request and response bodies
+a369ec1 Environment variables: {{var}} substitution + envs UI
+2b2418e Folder hierarchy in collections (Bruno parity)
+a825251 Save-to picker: pick collection + name on first save
+2972b0f Brand identity: Tangleweb spider mark and full icon set
+cf401e1 Sidecar polish: diagnostics endpoint + PID tracking
+34e2817 Add file-based persistence: collections + saved requests
+633ea4f UI overhaul: 3-pane layout with collections sidebar, tab bar, status bar
+3a10090 Initial scaffold: Tauri shell + Python FastAPI sidecar
+```
+
 ✅ Tauri shell + Python sidecar walking skeleton  
 ✅ 3-pane UI (sidebar / request / response) + tab strip  
 ✅ Logo + ikona set (Tangleweb mesh)  
@@ -224,6 +285,44 @@ cd apps/desktop/src-tauri && cargo test --lib
 ✅ Playwright E2E suite (7 testů) izolovaný od dev sidecaru  
 ✅ Sidecar diagnostics endpoint + PID file  
 ✅ PyInstaller bundling + Tauri sidecar spawn + port handshake  
+✅ CLAUDE.md kontext pro další session  
+
+### Test status (lokálně, 2026-05-09)
+
+| Suite | Počet | Čas | Stav |
+|---|---|---|---|
+| Sidecar pytest | 35 | < 1 s | 🟢 |
+| Rust unit (sidecar handshake) | 3 | < 1 s | 🟢 |
+| Frontend typecheck (`pnpm typecheck`) | — | < 5 s | 🟢 |
+| Frontend build (`pnpm build`) | — | ~1 s | 🟢 (~225 KB JS / 68 KB gz) |
+| Playwright E2E | 7 | ~9 s | 🟢 |
+
+### Co ještě nebylo v CI ověřeno
+
+- `apps/sidecar/scripts/build-bundle.sh` — fungoval lokálně na macOS
+  arm64. Linux a Windows runnery v CI workflow ho ještě nikdy
+  nespustili (commit `09e49dd` je první, který je má). Při prvním
+  CI runu po push čekej, že někde něco selže (typicky Windows path
+  separator nebo PyInstaller hidden-imports na Linuxu).
+- **A.5 — live verify bundlovaného sidecaru** přes `pnpm tauri dev`
+  jsem v session nedotáhl (tool stream se přerušil). PyInstaller
+  binárku jsem ručně otestoval (smoke test na portu 8767, /api/health
+  + collections + soap inspect přes fixture WSDL). Tauri spawn flow
+  se kompiluje a má unit testy na parser, ale skutečné spawn-and-
+  serve cyklus přes `tauri dev` zatím nikdo nezhlédnul.
+
+  **První akce nové session, pokud uživatel řekne "ověř/spusť":**
+
+  ```bash
+  pkill -f "tauri.js dev" 2>/dev/null
+  pkill -f "target/debug/theridion" 2>/dev/null
+  pkill -f "pnpm tauri dev" 2>/dev/null
+  cd /Users/tm/workspaces/projects/theridion/apps/desktop
+  pnpm sidecar:bundle  # pokud binaries/ chybí
+  pnpm tauri dev
+  # → sleduj v logu řádek "[sidecar stdout] THERIDION_SIDECAR_READY pid=… port=…"
+  # → po ~10 s by se mělo otevřít okno; status bar dole zelený "sidecar v0.0.1"
+  ```
 
 ## Roadmapa (po dokončení A)
 
