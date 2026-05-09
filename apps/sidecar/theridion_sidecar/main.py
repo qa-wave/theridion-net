@@ -34,18 +34,18 @@ def create_app() -> FastAPI:
         redoc_url=None,
     )
 
-    # In dev, the Vite dev server (5173) talks to us. In production, the
-    # Tauri shell uses tauri://localhost. Loopback-only is enforced by
-    # binding to 127.0.0.1; CORS is permissive against that loopback origin
-    # set.
+    # We only ever bind to 127.0.0.1, so any HTTP origin reaching us is
+    # already loopback-only. Match any localhost / 127.0.0.1 port via
+    # regex so dev (1420), Playwright tests (1421), and the Vite fallback
+    # (5173) all work without enumerating ports here. Tauri's custom
+    # protocols are matched explicitly.
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "http://localhost:1420",   # tauri dev
-            "http://localhost:5173",   # vite dev fallback
-            "tauri://localhost",
-            "https://tauri.localhost",
-        ],
+        allow_origin_regex=(
+            r"^(?:https?://(?:localhost|127\.0\.0\.1)(?::\d+)?"
+            r"|tauri://localhost"
+            r"|https://tauri\.localhost)$"
+        ),
         allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
