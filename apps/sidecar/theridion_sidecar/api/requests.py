@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import time
-from typing import Any, Literal
+from typing import Literal
 
 import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
+
+from .. import environments
 
 router = APIRouter(prefix="/api/requests", tags=["requests"])
 
@@ -22,6 +24,7 @@ class ExecuteRequest(BaseModel):
     body: str | None = None
     timeout_seconds: float = Field(default=30.0, gt=0, le=300)
     follow_redirects: bool = True
+    environment_id: str | None = None
 
 
 class ExecuteResponse(BaseModel):
@@ -32,10 +35,24 @@ class ExecuteResponse(BaseModel):
     body_size_bytes: int
     elapsed_ms: float
     final_url: str
+    # Echo back the URL after env-var substitution — handy for debugging
+    # "why didn't my {{baseUrl}} resolve" without re-running the request.
+    resolved_url: str | None = None
 
 
 @router.post("/execute", response_model=ExecuteResponse)
 async def execute(req: ExecuteRequest) -> ExecuteResponse:
+    # Resolve {{var}} placeholders against the chosen environment, if any.
+    env = environments.get(req.environment_id) if req.environment_id else None
+    if req.environment_id and env is None:
+        raise HTTPException(status_code=404, detail="environment not found")
+    resolved_url = environments.substitute(req.url, env)
+    resolved_headers = environments.substitute_dict(req.headers, env)
+    resolved_body = (
+        environments.substitute(req.body, env) if req.body is not None else None
+    )
+    resolved_query = environments.substitute_dict(req.query, env)
+
     started = time.perf_counter()
     try:
         async with httpx.AsyncClient(
@@ -45,25 +62,22 @@ async def execute(req: ExecuteRequest) -> ExecuteResponse:
         ) as client:
             response = await client.request(
                 method=req.method,
-                url=req.url,
-                headers=req.headers,
-                params=req.query or None,
-                content=req.body.encode("utf-8") if req.body is not None else None,
+                url=resolved_url,
+                headers=resolved_headers,
+                params=resolved_query or None,
+                content=resolved_body.encode("utf-8") if resolved_body is not None else None,
             )
     except httpx.RequestError as exc:
-        # Network / DNS / TLS issues — bubble up as 502 with detail. The
-        # frontend treats this as a "transport" error distinct from response
-        # status codes.
         raise HTTPException(status_code=502, detail=f"transport error: {exc}") from exc
 
     elapsed_ms = (time.perf_counter() - started) * 1000
-    body_text = response.text  # decoded via response.encoding
     return ExecuteResponse(
         status=response.status_code,
         status_text=response.reason_phrase or "",
         headers=dict(response.headers),
-        body=body_text,
+        body=response.text,
         body_size_bytes=len(response.content),
         elapsed_ms=round(elapsed_ms, 2),
         final_url=str(response.url),
+        resolved_url=resolved_url if env is not None else None,
     )
