@@ -12,6 +12,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from .assertions import Assertion
+
 HttpMethod = Literal[
     "GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"
 ]
@@ -45,6 +47,7 @@ class CollectionItem(BaseModel):
     headers: dict[str, str] = Field(default_factory=dict)
     body: str | None = None
     auth: AuthConfig | None = None
+    assertions: list[Assertion] = Field(default_factory=list)
     # Folder-specific field (populated when is_folder=True).
     items: list["CollectionItem"] = Field(default_factory=list)
 
@@ -87,4 +90,5 @@ class SaveRequestInput(BaseModel):
     headers: dict[str, str] = Field(default_factory=dict)
     body: str | None = None
     auth: AuthConfig | None = None
+    assertions: list[Assertion] = Field(default_factory=list)
     parent_folder_id: str | None = None
