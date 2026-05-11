@@ -26,6 +26,9 @@ dev = [
     "pyinstaller>=6.20.0",
 ]
 
+[project.scripts]
+theridion = "theridion_sidecar.cli:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
