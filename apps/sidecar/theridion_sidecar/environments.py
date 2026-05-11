@@ -137,11 +137,17 @@ def delete(env_id: str) -> bool:
     return True
 
 
-def substitute(text: str, env: Environment | None) -> str:
+def substitute(text: str, env: Environment | None, extra: dict[str, str] | None = None) -> str:
     """Replace every ``{{var}}`` in ``text`` with the matching enabled
-    variable's value or built-in function result. Unknown or disabled
-    vars are left as-is."""
-    lookup = {v.name: v.value for v in env.variables if v.enabled} if env else {}
+    variable's value or built-in function result. Resolution order:
+    extra (runtime) > env > globals > built-in. Unknown vars left as-is."""
+    from . import globals as global_store
+
+    lookup: dict[str, str] = global_store.as_dict()
+    if env:
+        lookup.update({v.name: v.value for v in env.variables if v.enabled})
+    if extra:
+        lookup.update(extra)
 
     def _sub(m: re.Match[str]) -> str:
         name = m.group(1)

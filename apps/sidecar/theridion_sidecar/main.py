@@ -24,6 +24,7 @@ from theridion_sidecar.api.cookies import router as cookies_router
 from theridion_sidecar.api.curl import router as curl_router
 from theridion_sidecar.api.diagnostics import router as diagnostics_router
 from theridion_sidecar.api.environments import router as environments_router
+from theridion_sidecar.api.globals import router as globals_router
 from theridion_sidecar.api.graphql import router as graphql_router
 from theridion_sidecar.api.health import router as health_router
 from theridion_sidecar.api.kafka import router as kafka_router
@@ -66,6 +67,7 @@ def create_app() -> FastAPI:
     app.include_router(scripts_router)
     app.include_router(collections_router)
     app.include_router(environments_router)
+    app.include_router(globals_router)
     app.include_router(kafka_router)
     app.include_router(graphql_router)
     app.include_router(soap_router)
