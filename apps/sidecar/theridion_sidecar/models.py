@@ -48,6 +48,7 @@ class CollectionItem(BaseModel):
     body: str | None = None
     auth: AuthConfig | None = None
     assertions: list[Assertion] = Field(default_factory=list)
+    pre_request_script: str | None = None
     # Folder-specific field (populated when is_folder=True).
     items: list["CollectionItem"] = Field(default_factory=list)
 
@@ -91,4 +92,5 @@ class SaveRequestInput(BaseModel):
     body: str | None = None
     auth: AuthConfig | None = None
     assertions: list[Assertion] = Field(default_factory=list)
+    pre_request_script: str | None = None
     parent_folder_id: str | None = None

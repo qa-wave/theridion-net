@@ -81,6 +81,7 @@ def save_request(collection_id: str, body: SaveRequestInput) -> Collection:
         body=body.body,
         auth=body.auth,
         assertions=body.assertions,
+        pre_request_script=body.pre_request_script,
     )
     try:
         return storage.add_request(collection_id, req, body.parent_folder_id)
