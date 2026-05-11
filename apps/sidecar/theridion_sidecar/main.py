@@ -40,6 +40,7 @@ from theridion_sidecar.api.oauth2 import router as oauth2_router
 from theridion_sidecar.api.grpc_api import router as grpc_router
 from theridion_sidecar.api.mock import router as mock_router
 from theridion_sidecar.api.chaining import router as chaining_router
+from theridion_sidecar.api.loadtest import router as loadtest_router
 
 
 def create_app() -> FastAPI:
@@ -89,6 +90,7 @@ def create_app() -> FastAPI:
     app.include_router(grpc_router)
     app.include_router(mock_router)
     app.include_router(chaining_router)
+    app.include_router(loadtest_router)
     return app
 
 
