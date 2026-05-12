@@ -35,6 +35,7 @@ dev = [
 
 [project.scripts]
 theridion = "theridion_sidecar.cli:main"
+theridion-mcp = "theridion_sidecar.mcp_bridge:main"
 
 [build-system]
 requires = ["hatchling"]
