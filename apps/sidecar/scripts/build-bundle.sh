@@ -11,7 +11,7 @@ cd "$(dirname "$0")/.."
 # Cross-compiling the sidecar isn't on the table for now (PyInstaller
 # bundles native binaries from the host), so the target triple has to
 # come from rustc's host.
-TARGET=$(rustc -vV | sed -n 's/^host: //p')
+TARGET=$(rustc -vV | grep "^host:" | awk '{print $2}')
 if [[ -z "$TARGET" ]]; then
   echo "fatal: could not determine host target triple via rustc" >&2
   exit 1
