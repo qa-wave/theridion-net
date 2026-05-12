@@ -46,6 +46,7 @@ from theridion_sidecar.api.loadtest import router as loadtest_router
 from theridion_sidecar.api.mock import router as mock_router
 from theridion_sidecar.api.multipart import router as multipart_router
 from theridion_sidecar.api.oauth2 import router as oauth2_router
+from theridion_sidecar.api.projects import router as projects_router
 from theridion_sidecar.api.requests import router as requests_router
 from theridion_sidecar.api.runner import router as runner_router
 from theridion_sidecar.api.schema_validation import router as schema_router
@@ -121,6 +122,7 @@ from theridion_sidecar.api.junit_reporter import router as junit_reporter_router
 from theridion_sidecar.api.cli_reporters import router as cli_reporters_router
 from theridion_sidecar.api.team_workspaces import router as team_workspaces_router
 from theridion_sidecar.api.integrations import router as integrations_router
+from theridion_sidecar.api.healing import router as healing_router
 from theridion_sidecar.api.mcp_server import router as mcp_server_router
 from theridion_sidecar.api.bru_format import router as bru_format_router
 from theridion_sidecar.api.yaml_collections import router as yaml_collections_router
@@ -201,6 +203,7 @@ def create_app() -> FastAPI:
     app.include_router(diagnostics_router)
     app.include_router(multipart_router)
     app.include_router(oauth2_router)
+    app.include_router(projects_router)
     app.include_router(grpc_router)
     app.include_router(mock_router)
     app.include_router(chaining_router)
@@ -282,6 +285,7 @@ def create_app() -> FastAPI:
     app.include_router(cli_reporters_router)
     app.include_router(team_workspaces_router)
     app.include_router(integrations_router)
+    app.include_router(healing_router)
     app.include_router(mcp_server_router)
     app.include_router(bru_format_router)
     app.include_router(yaml_collections_router)
