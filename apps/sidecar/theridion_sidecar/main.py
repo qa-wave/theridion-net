@@ -129,6 +129,8 @@ from theridion_sidecar.api.yaml_collections import router as yaml_collections_ro
 from theridion_sidecar.api.composite_project import router as composite_project_router
 from theridion_sidecar.api.conversational_ai import router as conversational_ai_router
 from theridion_sidecar.api.vscode_api import router as vscode_api_router
+from theridion_sidecar.api.agent_explorer import router as agent_explorer_router
+from theridion_sidecar.api.replay import router as replay_router
 
 
 class _TokenAuthMiddleware(BaseHTTPMiddleware):
@@ -292,6 +294,8 @@ def create_app() -> FastAPI:
     app.include_router(composite_project_router)
     app.include_router(conversational_ai_router)
     app.include_router(vscode_api_router)
+    app.include_router(agent_explorer_router)
+    app.include_router(replay_router)
     return app
 
 
