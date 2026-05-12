@@ -123,7 +123,6 @@ async def execute(req: ExecuteRequest) -> ExecuteResponse:
                 headers=resolved_headers,
                 params=resolved_query or None,
                 content=resolved_body.encode("utf-8") if resolved_body is not None else None,
-                extensions={"trace": lambda *_: None},
             )
             connect_done = time.perf_counter()
     except httpx.RequestError as exc:
