@@ -53,6 +53,38 @@ from theridion_sidecar.api.testgen import router as testgen_router
 from theridion_sidecar.api.timeline import router as timeline_router
 from theridion_sidecar.api.websocket import router as websocket_router
 from theridion_sidecar.api.workspace import router as workspace_router
+from theridion_sidecar.api.response_trends import router as response_trends_router
+from theridion_sidecar.api.security_audit import router as security_audit_router
+from theridion_sidecar.api.ssl_inspect import router as ssl_inspect_router
+from theridion_sidecar.api.dns_inspect import router as dns_inspect_router
+from theridion_sidecar.api.compression_stats import router as compression_stats_router
+from theridion_sidecar.api.redirect_chain import router as redirect_chain_router
+from theridion_sidecar.api.content_type_validator import router as content_type_validator_router
+from theridion_sidecar.api.loadtest_patterns import router as loadtest_patterns_router
+from theridion_sidecar.api.latency_histogram import router as latency_histogram_router
+from theridion_sidecar.api.throughput_timeline import router as throughput_timeline_router
+from theridion_sidecar.api.connection_stats import router as connection_stats_router
+from theridion_sidecar.api.user_simulation import router as user_simulation_router
+from theridion_sidecar.api.sla_check import router as sla_check_router
+from theridion_sidecar.api.loadtest_compare import router as loadtest_compare_router
+from theridion_sidecar.api.flow_graph import router as flow_graph_router
+from theridion_sidecar.api.retry_tester import router as retry_tester_router
+from theridion_sidecar.api.ratelimit_detect import router as ratelimit_detect_router
+from theridion_sidecar.api.idempotency_check import router as idempotency_check_router
+from theridion_sidecar.api.pagination_walker import router as pagination_walker_router
+from theridion_sidecar.api.contract_drift import router as contract_drift_router
+from theridion_sidecar.api.multi_env_runner import router as multi_env_runner_router
+from theridion_sidecar.api.data_generator import router as data_generator_router
+from theridion_sidecar.api.waterfall import router as waterfall_router
+from theridion_sidecar.api.curl_log import router as curl_log_router
+from theridion_sidecar.api.mock_diff import router as mock_diff_router
+from theridion_sidecar.api.error_patterns import router as error_patterns_router
+from theridion_sidecar.api.custom_dashboard import router as custom_dashboard_router
+from theridion_sidecar.api.jwt_inspect import router as jwt_inspect_router
+from theridion_sidecar.api.token_refresh import router as token_refresh_router
+from theridion_sidecar.api.cors_test import router as cors_test_router
+from theridion_sidecar.api.injection_scan import router as injection_scan_router
+from theridion_sidecar.api.sensitive_data import router as sensitive_data_router
 
 
 def create_app() -> FastAPI:
@@ -115,6 +147,38 @@ def create_app() -> FastAPI:
     app.include_router(envdiff_router)
     app.include_router(favorites_router)
     app.include_router(batch_router)
+    app.include_router(response_trends_router)
+    app.include_router(security_audit_router)
+    app.include_router(ssl_inspect_router)
+    app.include_router(dns_inspect_router)
+    app.include_router(compression_stats_router)
+    app.include_router(redirect_chain_router)
+    app.include_router(content_type_validator_router)
+    app.include_router(loadtest_patterns_router)
+    app.include_router(latency_histogram_router)
+    app.include_router(throughput_timeline_router)
+    app.include_router(connection_stats_router)
+    app.include_router(user_simulation_router)
+    app.include_router(sla_check_router)
+    app.include_router(loadtest_compare_router)
+    app.include_router(flow_graph_router)
+    app.include_router(retry_tester_router)
+    app.include_router(ratelimit_detect_router)
+    app.include_router(idempotency_check_router)
+    app.include_router(pagination_walker_router)
+    app.include_router(contract_drift_router)
+    app.include_router(multi_env_runner_router)
+    app.include_router(data_generator_router)
+    app.include_router(waterfall_router)
+    app.include_router(curl_log_router)
+    app.include_router(mock_diff_router)
+    app.include_router(error_patterns_router)
+    app.include_router(custom_dashboard_router)
+    app.include_router(jwt_inspect_router)
+    app.include_router(token_refresh_router)
+    app.include_router(cors_test_router)
+    app.include_router(injection_scan_router)
+    app.include_router(sensitive_data_router)
     return app
 
 
