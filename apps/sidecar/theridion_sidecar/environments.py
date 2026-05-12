@@ -137,13 +137,25 @@ def delete(env_id: str) -> bool:
     return True
 
 
-def substitute(text: str, env: Environment | None, extra: dict[str, str] | None = None) -> str:
+def substitute(
+    text: str,
+    env: Environment | None,
+    extra: dict[str, str] | None = None,
+    collection_vars: dict[str, str] | None = None,
+) -> str:
     """Replace every ``{{var}}`` in ``text`` with the matching enabled
-    variable's value or built-in function result. Resolution order:
-    extra (runtime) > env > globals > built-in. Unknown vars left as-is."""
+    variable's value or built-in function result.
+
+    Resolution order (later wins):
+    globals -> collection_vars -> env -> extra (runtime) -> built-in.
+
+    Unknown vars are left as-is.
+    """
     from . import globals as global_store
 
     lookup: dict[str, str] = global_store.as_dict()
+    if collection_vars:
+        lookup.update(collection_vars)
     if env:
         lookup.update({v.name: v.value for v in env.variables if v.enabled})
     if extra:
@@ -160,10 +172,12 @@ def substitute(text: str, env: Environment | None, extra: dict[str, str] | None 
     return _VAR_PATTERN.sub(_sub, text)
 
 
-def substitute_dict(d: dict[str, str], env: Environment | None) -> dict[str, str]:
-    if env is None:
-        return d
-    return {k: substitute(v, env) for k, v in d.items()}
+def substitute_dict(
+    d: dict[str, str],
+    env: Environment | None,
+    collection_vars: dict[str, str] | None = None,
+) -> dict[str, str]:
+    return {k: substitute(v, env, collection_vars=collection_vars) for k, v in d.items()}
 
 
 def _atomic_write(env: Environment) -> None:

@@ -67,6 +67,13 @@ async def run_collection(collection_id: str, body: RunInput) -> RunCollectionOut
     if body.environment_id and env is None:
         raise HTTPException(status_code=404, detail="environment not found")
 
+    # Extract collection-level variables once for all requests.
+    coll_vars: dict[str, str] | None = None
+    if coll.variables:
+        enabled = {v.name: v.value for v in coll.variables if v.enabled}
+        if enabled:
+            coll_vars = enabled
+
     requests = _collect_requests(coll.items)
     results: list[RunRequestResult] = []
     total_elapsed = 0.0
@@ -85,17 +92,17 @@ async def run_collection(collection_id: str, body: RunInput) -> RunCollectionOut
             ))
             continue
 
-        resolved_url = environments.substitute(req.url, env)
-        resolved_headers = environments.substitute_dict(req.headers, env)
+        resolved_url = environments.substitute(req.url, env, collection_vars=coll_vars)
+        resolved_headers = environments.substitute_dict(req.headers, env, collection_vars=coll_vars)
         resolved_body = (
-            environments.substitute(req.body, env) if req.body else None
+            environments.substitute(req.body, env, collection_vars=coll_vars) if req.body else None
         )
 
         # Auth injection.
         resolved_query: dict[str, str] = {}
         if req.auth and req.auth.type != "none":
             from .requests import _apply_auth
-            _apply_auth(req.auth, resolved_headers, resolved_query, env)
+            _apply_auth(req.auth, resolved_headers, resolved_query, env, collection_vars=coll_vars)
 
         started = time.perf_counter()
         try:

@@ -10,7 +10,7 @@ import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from .. import cookies, environments
+from .. import cookies, environments, storage
 from ..models import AuthConfig
 
 router = APIRouter(prefix="/api/requests", tags=["requests"])
@@ -28,6 +28,7 @@ class ExecuteRequest(BaseModel):
     timeout_seconds: float = Field(default=30.0, gt=0, le=300)
     follow_redirects: bool = True
     environment_id: str | None = None
+    collection_id: str | None = None
     client_cert: str | None = None
     client_key: str | None = None
 
@@ -58,9 +59,10 @@ def _apply_auth(
     headers: dict[str, str],
     query: dict[str, str],
     env: environments.Environment | None,
+    collection_vars: dict[str, str] | None = None,
 ) -> None:
     """Mutate *headers* or *query* in place to inject auth credentials."""
-    sub = lambda v: environments.substitute(v, env) if v else ""  # noqa: E731
+    sub = lambda v: environments.substitute(v, env, collection_vars=collection_vars) if v else ""  # noqa: E731
     if auth.type == "bearer":
         headers["Authorization"] = f"Bearer {sub(auth.token)}"
     elif auth.type == "basic":
@@ -84,16 +86,24 @@ async def execute(req: ExecuteRequest) -> ExecuteResponse:
     env = environments.get(req.environment_id) if req.environment_id else None
     if req.environment_id and env is None:
         raise HTTPException(status_code=404, detail="environment not found")
-    resolved_url = environments.substitute(req.url, env)
-    resolved_headers = environments.substitute_dict(req.headers, env)
+
+    # Extract collection-level variables when a collection_id is provided.
+    coll_vars: dict[str, str] | None = None
+    if req.collection_id:
+        coll = storage.get(req.collection_id)
+        if coll is not None:
+            coll_vars = {v.name: v.value for v in coll.variables if v.enabled}
+
+    resolved_url = environments.substitute(req.url, env, collection_vars=coll_vars)
+    resolved_headers = environments.substitute_dict(req.headers, env, collection_vars=coll_vars)
     resolved_body = (
-        environments.substitute(req.body, env) if req.body is not None else None
+        environments.substitute(req.body, env, collection_vars=coll_vars) if req.body is not None else None
     )
-    resolved_query = environments.substitute_dict(req.query, env)
+    resolved_query = environments.substitute_dict(req.query, env, collection_vars=coll_vars)
 
     # Inject authentication into headers/query.
     if req.auth and req.auth.type != "none":
-        _apply_auth(req.auth, resolved_headers, resolved_query, env)
+        _apply_auth(req.auth, resolved_headers, resolved_query, env, collection_vars=coll_vars)
 
     # Load persisted cookies for this environment.
     jar = cookies.load(req.environment_id) if req.environment_id else None
