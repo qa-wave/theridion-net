@@ -36,6 +36,27 @@ class AuthConfig(BaseModel):
     add_to: Literal["header", "query"] = "header"
 
 
+class RequestExample(BaseModel):
+    """A named request variant saved under a collection item."""
+
+    id: str
+    name: str
+    method: HttpMethod = "GET"
+    url: str = ""
+    headers: dict[str, str] = Field(default_factory=dict)
+    body: str | None = None
+    auth: AuthConfig | None = None
+    notes: str | None = None
+
+
+class RequestCapture(BaseModel):
+    """A value produced by a request and exposed as a runtime variable."""
+
+    name: str
+    source: Literal["body", "header", "status"] = "body"
+    path: str = ""
+
+
 class CollectionItem(BaseModel):
     """Either a folder (is_folder=True, has child items) or a request."""
     id: str
@@ -49,8 +70,10 @@ class CollectionItem(BaseModel):
     auth: AuthConfig | None = None
     assertions: list[Assertion] = Field(default_factory=list)
     pre_request_script: str | None = None
+    examples: list[RequestExample] = Field(default_factory=list)
+    captures: list[RequestCapture] = Field(default_factory=list)
     # Folder-specific field (populated when is_folder=True).
-    items: list["CollectionItem"] = Field(default_factory=list)
+    items: list[CollectionItem] = Field(default_factory=list)
 
 
 CollectionItem.model_rebuild()
@@ -102,4 +125,6 @@ class SaveRequestInput(BaseModel):
     auth: AuthConfig | None = None
     assertions: list[Assertion] = Field(default_factory=list)
     pre_request_script: str | None = None
+    examples: list[RequestExample] = Field(default_factory=list)
+    captures: list[RequestCapture] = Field(default_factory=list)
     parent_folder_id: str | None = None

@@ -18,30 +18,32 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from theridion_sidecar import __version__, storage
+from theridion_sidecar.api.advanced import router as advanced_router
 from theridion_sidecar.api.assertions import router as assertions_router
+from theridion_sidecar.api.chaining import router as chaining_router
 from theridion_sidecar.api.codegen import router as codegen_router
 from theridion_sidecar.api.collections import router as collections_router
 from theridion_sidecar.api.cookies import router as cookies_router
 from theridion_sidecar.api.curl import router as curl_router
 from theridion_sidecar.api.diagnostics import router as diagnostics_router
 from theridion_sidecar.api.environments import router as environments_router
+from theridion_sidecar.api.extras import router as extras_router
 from theridion_sidecar.api.globals import router as globals_router
 from theridion_sidecar.api.graphql import router as graphql_router
+from theridion_sidecar.api.grpc_api import router as grpc_router
 from theridion_sidecar.api.health import router as health_router
 from theridion_sidecar.api.importer import router as importer_router
 from theridion_sidecar.api.kafka import router as kafka_router
+from theridion_sidecar.api.loadtest import router as loadtest_router
+from theridion_sidecar.api.mock import router as mock_router
+from theridion_sidecar.api.multipart import router as multipart_router
+from theridion_sidecar.api.oauth2 import router as oauth2_router
 from theridion_sidecar.api.requests import router as requests_router
 from theridion_sidecar.api.runner import router as runner_router
 from theridion_sidecar.api.scripts import router as scripts_router
 from theridion_sidecar.api.soap import router as soap_router
+from theridion_sidecar.api.testgen import router as testgen_router
 from theridion_sidecar.api.websocket import router as websocket_router
-from theridion_sidecar.api.multipart import router as multipart_router
-from theridion_sidecar.api.oauth2 import router as oauth2_router
-from theridion_sidecar.api.grpc_api import router as grpc_router
-from theridion_sidecar.api.mock import router as mock_router
-from theridion_sidecar.api.chaining import router as chaining_router
-from theridion_sidecar.api.loadtest import router as loadtest_router
-from theridion_sidecar.api.extras import router as extras_router
 
 
 def create_app() -> FastAPI:
@@ -93,6 +95,8 @@ def create_app() -> FastAPI:
     app.include_router(chaining_router)
     app.include_router(loadtest_router)
     app.include_router(extras_router)
+    app.include_router(testgen_router)
+    app.include_router(advanced_router)
     return app
 
 

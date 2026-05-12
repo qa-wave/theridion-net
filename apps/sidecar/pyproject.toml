@@ -18,6 +18,9 @@ dependencies = [
     "grpcio>=1.80.0",
     "grpcio-reflection>=1.80.0",
     "protobuf>=6.33.6",
+    "cryptography>=48.0.0",
+    "jsonschema>=4.26.0",
+    "pyyaml>=6.0.3",
 ]
 
 [dependency-groups]

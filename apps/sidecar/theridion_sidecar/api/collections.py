@@ -5,10 +5,9 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, HTTPException
-
-from .. import storage
 from pydantic import BaseModel, Field
 
+from .. import storage
 from ..models import (
     Collection,
     CollectionItem,
@@ -82,6 +81,8 @@ def save_request(collection_id: str, body: SaveRequestInput) -> Collection:
         auth=body.auth,
         assertions=body.assertions,
         pre_request_script=body.pre_request_script,
+        examples=body.examples,
+        captures=body.captures,
     )
     try:
         return storage.add_request(collection_id, req, body.parent_folder_id)
