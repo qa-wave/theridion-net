@@ -92,11 +92,9 @@ from theridion_sidecar.api.ws_security import router as ws_security_router
 from theridion_sidecar.api.mtom import router as mtom_router
 from theridion_sidecar.api.wsdl_refactor import router as wsdl_refactor_router
 from theridion_sidecar.api.soap_coverage import router as soap_coverage_router
-from theridion_sidecar.api.jms_client import router as jms_client_router
 from theridion_sidecar.api.jdbc_query import router as jdbc_query_router
 from theridion_sidecar.api.xsd_validator import router as xsd_validator_router
 from theridion_sidecar.api.wsdl_mock_gen import router as wsdl_mock_gen_router
-from theridion_sidecar.api.mqtt_client import router as mqtt_client_router
 from theridion_sidecar.api.oauth1 import router as oauth1_router
 from theridion_sidecar.api.visual_test_builder import router as visual_test_builder_router
 from theridion_sidecar.api.data_loop import router as data_loop_router
@@ -119,7 +117,6 @@ from theridion_sidecar.api.secret_encryption import router as secret_encryption_
 from theridion_sidecar.api.secret_managers import router as secret_managers_router
 from theridion_sidecar.api.pac_proxy import router as pac_proxy_router
 from theridion_sidecar.api.cookie_scripting import router as cookie_scripting_router
-from theridion_sidecar.api.groovy_engine import router as groovy_engine_router
 from theridion_sidecar.api.junit_reporter import router as junit_reporter_router
 from theridion_sidecar.api.cli_reporters import router as cli_reporters_router
 from theridion_sidecar.api.team_workspaces import router as team_workspaces_router
@@ -130,7 +127,6 @@ from theridion_sidecar.api.yaml_collections import router as yaml_collections_ro
 from theridion_sidecar.api.composite_project import router as composite_project_router
 from theridion_sidecar.api.conversational_ai import router as conversational_ai_router
 from theridion_sidecar.api.vscode_api import router as vscode_api_router
-from theridion_sidecar.api.amf_protocol import router as amf_protocol_router
 
 
 class _TokenAuthMiddleware(BaseHTTPMiddleware):
@@ -257,11 +253,9 @@ def create_app() -> FastAPI:
     app.include_router(mtom_router)
     app.include_router(wsdl_refactor_router)
     app.include_router(soap_coverage_router)
-    app.include_router(jms_client_router)
     app.include_router(jdbc_query_router)
     app.include_router(xsd_validator_router)
     app.include_router(wsdl_mock_gen_router)
-    app.include_router(mqtt_client_router)
     app.include_router(oauth1_router)
     app.include_router(visual_test_builder_router)
     app.include_router(data_loop_router)
@@ -284,7 +278,6 @@ def create_app() -> FastAPI:
     app.include_router(secret_managers_router)
     app.include_router(pac_proxy_router)
     app.include_router(cookie_scripting_router)
-    app.include_router(groovy_engine_router)
     app.include_router(junit_reporter_router)
     app.include_router(cli_reporters_router)
     app.include_router(team_workspaces_router)
@@ -295,7 +288,6 @@ def create_app() -> FastAPI:
     app.include_router(composite_project_router)
     app.include_router(conversational_ai_router)
     app.include_router(vscode_api_router)
-    app.include_router(amf_protocol_router)
     return app
 
 
