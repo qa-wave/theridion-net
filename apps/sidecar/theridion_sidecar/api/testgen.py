@@ -331,6 +331,10 @@ def _openapi_smoke_request(
             body = json.dumps(sample, ensure_ascii=False)
             headers["content-type"] = "application/json"
 
+    # Inject auth header(s) for any apiKey-in-header schemes that apply.
+    for hdr_name, hdr_value in _apikey_headers_for_op(spec, op):
+        headers[hdr_name] = hdr_value
+
     label = op.get("summary") or f"{method} {path}"
 
     return _request_item(
@@ -347,6 +351,9 @@ def _openapi_regression(
     spec: dict[str, Any], paths: dict[str, Any], base_url: str,
 ) -> list[CollectionItem]:
     out: list[CollectionItem] = []
+    # Track which protected ops we've already covered with a no-auth test —
+    # one negative auth test per (method, path) is enough.
+    auth_covered: set[tuple[str, str]] = set()
     for path, methods in paths.items():
         if not isinstance(methods, dict):
             continue
@@ -354,15 +361,35 @@ def _openapi_regression(
             if method.lower() not in HTTP_METHODS or not isinstance(op, dict):
                 continue
             mt = method.upper()
+            # ---- Missing API key → 401/403 (only when the op is protected
+            # by an apiKey scheme; GETs only to stay side-effect-free).
+            auth_headers = _apikey_headers_for_op(spec, op)
+            if auth_headers and mt == "GET" and (mt, path) not in auth_covered:
+                resolved_path = path
+                for p in [pp for pp in (op.get("parameters") or []) if pp.get("in") == "path"]:
+                    resolved_path = resolved_path.replace(
+                        "{" + p["name"] + "}", str(_sample_for_param(p)),
+                    )
+                out.append(_request_item(
+                    name=f"{mt} {path} — no API key → 401",
+                    method=mt,
+                    url=f"{base_url}{resolved_path}",
+                    assertions=[_A("status", expected="401")],
+                ))
+                auth_covered.add((mt, path))
             # Path params → missing-id 404 test (only on GETs to keep it
             # idempotent; PATCH/DELETE may have side effects).
             if "{" in path and mt == "GET":
                 # Replace EVERY path param with a clearly bogus value.
                 bogus_path = re.sub(r"\{[^}]+\}", "DOES-NOT-EXIST-999", path)
+                req_headers: dict[str, str] = {}
+                for hdr_name, hdr_value in _apikey_headers_for_op(spec, op):
+                    req_headers[hdr_name] = hdr_value
                 out.append(_request_item(
                     name=f"{mt} {path} — missing → 404",
                     method=mt,
                     url=f"{base_url}{bogus_path}",
+                    headers=req_headers,
                     assertions=[
                         _A("status", expected="404"),
                     ],
@@ -544,6 +571,65 @@ def _find_enum_field(schema: dict[str, Any], spec: dict[str, Any]) -> str | None
         if isinstance(v.get("enum"), list) and v["enum"]:
             return k
     return None
+
+
+def _apikey_headers_for_op(
+    spec: dict[str, Any], op: dict[str, Any],
+) -> list[tuple[str, str]]:
+    """Return (header, sample_value) pairs for every apiKey-in-header scheme
+    that applies to *op*. Empty if the op is unauthenticated.
+
+    Sample values are extracted from the scheme's description (any token
+    matching `key:\\s*<value>` or `token:\\s*<value>`); fallback `<api-key>`.
+    """
+    schemes = (spec.get("components") or {}).get("securitySchemes") or {}
+    if not isinstance(schemes, dict) or not schemes:
+        return []
+
+    # Per-op security overrides global. `security: []` means "no auth".
+    sec_req = op.get("security")
+    if sec_req is None:
+        sec_req = spec.get("security") or []
+    if not sec_req:
+        return []
+
+    out: list[tuple[str, str]] = []
+    for requirement in sec_req:
+        if not isinstance(requirement, dict):
+            continue
+        for scheme_name in requirement:
+            scheme = schemes.get(scheme_name)
+            if not isinstance(scheme, dict):
+                continue
+            if scheme.get("type") != "apiKey":
+                continue
+            if scheme.get("in") != "header":
+                continue
+            hdr = scheme.get("name")
+            if not hdr:
+                continue
+            value = _extract_sample_key(scheme.get("description") or "") or "<api-key>"
+            out.append((str(hdr), value))
+    # Dedupe by header name, keeping the first value.
+    seen: set[str] = set()
+    deduped: list[tuple[str, str]] = []
+    for h, v in out:
+        if h.lower() in seen:
+            continue
+        seen.add(h.lower())
+        deduped.append((h, v))
+    return deduped
+
+
+_KEY_VALUE_RE = re.compile(
+    r"(?:key|token)\s*[:=]\s*([A-Za-z0-9][A-Za-z0-9_\-.]{4,})",
+    re.IGNORECASE,
+)
+
+
+def _extract_sample_key(description: str) -> str | None:
+    m = _KEY_VALUE_RE.search(description or "")
+    return m.group(1) if m else None
 
 
 def _resolve_ref(spec: dict[str, Any], ref: str) -> Any:
