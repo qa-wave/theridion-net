@@ -138,6 +138,95 @@ async def generate_tests(body: TestGenInput) -> TestGenOutput:
     return TestGenOutput(assertions=assertions, explanation=explanation)
 
 
+# ---- Heuristic "smart" assertion generator (no LLM needed) ---------------
+
+class SmartSuggestInput(BaseModel):
+    method: str = "GET"
+    url: str = ""
+    status: int = 200
+    response_body: str = ""
+    response_headers: dict[str, str] = Field(default_factory=dict)
+    response_time_ms: float | None = None
+
+
+class SmartSuggestOutput(BaseModel):
+    assertions: list[Assertion]
+
+
+@router.post("/suggest-from-response", response_model=SmartSuggestOutput)
+async def suggest_from_response(body: SmartSuggestInput) -> SmartSuggestOutput:
+    """Generate smart assertions purely from heuristics — no Ollama needed."""
+    assertions: list[Assertion] = []
+
+    # 1. Always: status code assertion.
+    assertions.append(Assertion(
+        type="status", expected=str(body.status),
+    ))
+
+    # 2. Content-Type header.
+    ct = body.response_headers.get("content-type") or body.response_headers.get("Content-Type")
+    if ct:
+        assertions.append(Assertion(
+            type="header_equals", expected=ct.split(";")[0].strip(),
+            path="content-type",
+        ))
+
+    # 3. Rate-limit headers.
+    for hdr in ("x-ratelimit-limit", "x-ratelimit-remaining", "x-ratelimit-reset"):
+        val = None
+        for k in body.response_headers:
+            if k.lower() == hdr:
+                val = k
+                break
+        if val:
+            assertions.append(Assertion(
+                type="header_exists", path=val,
+            ))
+
+    # 4. Cache-Control header.
+    for k in body.response_headers:
+        if k.lower() == "cache-control":
+            assertions.append(Assertion(
+                type="header_exists", path=k,
+            ))
+            break
+
+    # 5. JSON body heuristics.
+    parsed = None
+    try:
+        parsed = json.loads(body.response_body)
+    except (json.JSONDecodeError, ValueError):
+        pass
+
+    if parsed is not None:
+        if isinstance(parsed, dict):
+            # Check top-level keys exist.
+            for key in list(parsed.keys())[:10]:
+                assertions.append(Assertion(
+                    type="json_path", path=key, operator="exists",
+                ))
+        elif isinstance(parsed, list):
+            # Array non-empty check.
+            assertions.append(Assertion(
+                type="body_regex", expected=r"^\[.+\]$",
+            ))
+            # First item key checks.
+            if parsed and isinstance(parsed[0], dict):
+                for key in list(parsed[0].keys())[:5]:
+                    assertions.append(Assertion(
+                        type="json_path", path=f"0.{key}", operator="exists",
+                    ))
+
+    # 6. Response time — 2x actual (if provided).
+    if body.response_time_ms is not None and body.response_time_ms > 0:
+        limit = round(body.response_time_ms * 2)
+        assertions.append(Assertion(
+            type="response_time", expected=str(limit),
+        ))
+
+    return SmartSuggestOutput(assertions=assertions)
+
+
 async def _call_ollama(ai: settings_store.AISettings, prompt: str) -> tuple[list[Assertion], str]:
     try:
         async with httpx.AsyncClient(timeout=60) as client:

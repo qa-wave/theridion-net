@@ -131,6 +131,9 @@ from theridion_sidecar.api.conversational_ai import router as conversational_ai_
 from theridion_sidecar.api.vscode_api import router as vscode_api_router
 from theridion_sidecar.api.agent_explorer import router as agent_explorer_router
 from theridion_sidecar.api.replay import router as replay_router
+from theridion_sidecar.api.contract_guard import router as contract_guard_router
+from theridion_sidecar.api.variable_inspector import router as variable_inspector_router
+from theridion_sidecar.api.semantic_diff import router as semantic_diff_router
 
 
 class _TokenAuthMiddleware(BaseHTTPMiddleware):
@@ -296,6 +299,9 @@ def create_app() -> FastAPI:
     app.include_router(vscode_api_router)
     app.include_router(agent_explorer_router)
     app.include_router(replay_router)
+    app.include_router(contract_guard_router)
+    app.include_router(variable_inspector_router)
+    app.include_router(semantic_diff_router)
     return app
 
 

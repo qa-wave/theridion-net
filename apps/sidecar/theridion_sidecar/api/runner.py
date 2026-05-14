@@ -174,3 +174,24 @@ async def run_collection(collection_id: str, body: RunInput) -> RunCollectionOut
         failed_assertions=total_a_failed,
         total_elapsed_ms=round(total_elapsed, 2),
     )
+
+
+class RunWithTraceOutput(BaseModel):
+    run: RunCollectionOutput
+    trace_html: str
+
+
+@router.post("/{collection_id}/run-with-trace", response_model=RunWithTraceOutput)
+async def run_with_trace(collection_id: str, body: RunInput) -> RunWithTraceOutput:
+    """Run a collection and return results together with a self-contained
+    HTML trace viewer."""
+    run_output = await run_collection(collection_id, body)
+
+    from ..trace_viewer import generate_trace_html
+
+    trace_html = generate_trace_html(
+        collection_name=run_output.collection_name,
+        results=[r.model_dump(mode="json") for r in run_output.results],
+        elapsed_ms=run_output.total_elapsed_ms,
+    )
+    return RunWithTraceOutput(run=run_output, trace_html=trace_html)
