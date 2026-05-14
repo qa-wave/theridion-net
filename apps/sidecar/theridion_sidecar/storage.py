@@ -205,6 +205,39 @@ def move_item(
     return coll
 
 
+def reorder_items(
+    collection_id: str,
+    parent_folder_id: str | None,
+    item_ids: list[str],
+) -> Collection:
+    """Reorder items within a parent (root if None) to match the given id list."""
+    coll = get(collection_id)
+    if coll is None:
+        raise FileNotFoundError(f"collection {collection_id} not found")
+    target_list = coll.items
+    if parent_folder_id:
+        folder = _find_folder(coll.items, parent_folder_id)
+        if folder is None:
+            raise FileNotFoundError(f"folder {parent_folder_id} not found")
+        target_list = folder.items
+    # Build a lookup of existing items by id.
+    by_id = {it.id: it for it in target_list}
+    # Validate that all ids refer to existing children.
+    for iid in item_ids:
+        if iid not in by_id:
+            raise FileNotFoundError(f"item {iid} not found in target container")
+    # Rebuild the list in the requested order, appending any items not in
+    # item_ids at the end (defensive — shouldn't happen normally).
+    reordered = [by_id[iid] for iid in item_ids]
+    for it in target_list:
+        if it.id not in {iid for iid in item_ids}:
+            reordered.append(it)
+    target_list.clear()
+    target_list.extend(reordered)
+    _atomic_write(coll)
+    return coll
+
+
 def delete_collection(collection_id: str) -> bool:
     p = _path_for(collection_id)
     if not p.exists():

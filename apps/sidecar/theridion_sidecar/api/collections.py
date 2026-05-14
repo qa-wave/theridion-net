@@ -98,6 +98,11 @@ class MoveInput(BaseModel):
     target_folder_id: str | None = None
 
 
+class ReorderInput(BaseModel):
+    parent_folder_id: str | None = None
+    item_ids: list[str]
+
+
 @router.patch("/{collection_id}", response_model=Collection)
 def rename_collection(collection_id: str, body: RenameInput) -> Collection:
     try:
@@ -120,6 +125,45 @@ def move_item(collection_id: str, item_id: str, body: MoveInput) -> Collection:
         return storage.move_item(collection_id, item_id, body.target_folder_id)
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
+
+
+@router.patch("/{collection_id}/reorder", response_model=Collection)
+def reorder_items(collection_id: str, body: ReorderInput) -> Collection:
+    try:
+        return storage.reorder_items(
+            collection_id, body.parent_folder_id, body.item_ids,
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+
+@router.post("/{collection_id}/export-curl")
+def export_curl(collection_id: str) -> dict:
+    """Generate cURL commands for every request in a collection."""
+    coll = storage.get(collection_id)
+    if coll is None:
+        raise HTTPException(status_code=404, detail="collection not found")
+
+    def _flat_requests(items: list[CollectionItem]) -> list[CollectionItem]:
+        out: list[CollectionItem] = []
+        for it in items:
+            if it.is_folder:
+                out.extend(_flat_requests(it.items))
+            else:
+                out.append(it)
+        return out
+
+    requests = _flat_requests(coll.items)
+    curls: list[str] = []
+    for req in requests:
+        parts = ["curl", "-X", req.method or "GET"]
+        for k, v in (req.headers or {}).items():
+            parts.append(f"-H '{k}: {v}'")
+        if req.body:
+            parts.append(f"-d '{req.body}'")
+        parts.append(f"'{req.url or ''}'")
+        curls.append(" ".join(parts))
+    return {"commands": curls, "count": len(curls)}
 
 
 @router.delete(
