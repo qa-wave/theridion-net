@@ -31,6 +31,8 @@ class ExecuteRequest(BaseModel):
     collection_id: str | None = None
     client_cert: str | None = None
     client_key: str | None = None
+    ca_bundle_path: str | None = None
+    verify_ssl: bool = True
 
 
 class TimingBreakdown(BaseModel):
@@ -168,6 +170,17 @@ async def execute(req: ExecuteRequest) -> ExecuteResponse:
     elif req.client_cert:
         cert_pair = (req.client_cert, req.client_cert)
 
+    # Resolve SSL verification: ca_bundle_path > verify_ssl toggle > default.
+    ssl_verify: bool | str = True
+    if not req.verify_ssl:
+        ssl_verify = False
+    elif req.ca_bundle_path:
+        from pathlib import Path
+        ca_path = Path(req.ca_bundle_path).expanduser().resolve()
+        if not ca_path.is_file():
+            raise HTTPException(status_code=400, detail=f"CA bundle not found: {req.ca_bundle_path}")
+        ssl_verify = str(ca_path)
+
     # Set up timing collector for httpcore trace events.
     collector = _TimingCollector()
 
@@ -180,6 +193,7 @@ async def execute(req: ExecuteRequest) -> ExecuteResponse:
             follow_redirects=req.follow_redirects,
             cookies=httpx_cookies,
             cert=cert_pair,
+            verify=ssl_verify,
         ) as client:
             request = client.build_request(
                 method=req.method,
