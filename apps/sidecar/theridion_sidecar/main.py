@@ -42,6 +42,7 @@ from theridion_sidecar.api.grpc_api import router as grpc_router
 from theridion_sidecar.api.health import router as health_router
 from theridion_sidecar.api.importer import router as importer_router
 from theridion_sidecar.api.kafka import router as kafka_router
+from theridion_sidecar.api.load_runner import router as load_runner_router
 from theridion_sidecar.api.loadtest import router as loadtest_router
 from theridion_sidecar.api.mock import router as mock_router
 from theridion_sidecar.api.multipart import router as multipart_router
@@ -213,6 +214,7 @@ def create_app() -> FastAPI:
     app.include_router(mock_router)
     app.include_router(chaining_router)
     app.include_router(loadtest_router)
+    app.include_router(load_runner_router)
     app.include_router(extras_router)
     app.include_router(testgen_router)
     app.include_router(advanced_router)
