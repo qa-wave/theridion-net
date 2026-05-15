@@ -138,6 +138,7 @@ from theridion_sidecar.api.semantic_diff import router as semantic_diff_router
 from theridion_sidecar.api.owasp_scanner import router as owasp_scanner_router
 from theridion_sidecar.api.har_export import router as har_export_router
 from theridion_sidecar.api.postman_export import router as postman_export_router
+from theridion_sidecar.api.sse_client import router as sse_client_router
 
 
 class _TokenAuthMiddleware(BaseHTTPMiddleware):
@@ -310,6 +311,7 @@ def create_app() -> FastAPI:
     app.include_router(owasp_scanner_router)
     app.include_router(har_export_router)
     app.include_router(postman_export_router)
+    app.include_router(sse_client_router)
     return app
 
 
