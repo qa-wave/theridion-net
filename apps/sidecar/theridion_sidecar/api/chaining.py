@@ -157,3 +157,47 @@ async def execute_with_captures(req: ExecuteWithCapturesRequest) -> ExecuteWithC
         resolved_url=resolved_url if env is not None else None,
         captured_values=captured,
     )
+
+
+# ---- Standalone extraction (no HTTP call) ----------------------------------
+
+
+class ExtractInput(BaseModel):
+    """Extract values from an already-received response."""
+
+    response_body: str = ""
+    response_headers: dict[str, str] = Field(default_factory=dict)
+    response_status: int = 200
+    rules: list[CaptureRule] = Field(default_factory=list)
+
+
+class ExtractOutput(BaseModel):
+    extracted: dict[str, str | None] = Field(default_factory=dict)
+
+
+@router.post("/extract", response_model=ExtractOutput)
+def extract_values(body: ExtractInput) -> ExtractOutput:
+    """Apply capture rules to a response without executing a request.
+
+    Useful for request chaining UI: the user sends a request, gets a
+    response, then configures extractors against the live data.
+    """
+    extracted: dict[str, str | None] = {}
+    for rule in body.rules:
+        if rule.source == "status":
+            extracted[rule.name] = str(body.response_status)
+        elif rule.source == "header":
+            key_lower = rule.path.lower()
+            val = next(
+                (v for k, v in body.response_headers.items() if k.lower() == key_lower),
+                None,
+            )
+            extracted[rule.name] = val
+        elif rule.source == "body":
+            try:
+                data = json.loads(body.response_body)
+                val = _resolve_json_path(data, rule.path)
+                extracted[rule.name] = val
+            except (json.JSONDecodeError, ValueError):
+                extracted[rule.name] = None
+    return ExtractOutput(extracted=extracted)
