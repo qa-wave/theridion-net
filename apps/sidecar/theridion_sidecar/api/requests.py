@@ -37,8 +37,60 @@ class TimingBreakdown(BaseModel):
     dns_ms: float = 0
     connect_ms: float = 0
     tls_ms: float = 0
+    server_processing_ms: float = 0
     transfer_ms: float = 0
     total_ms: float = 0
+
+
+class _TimingCollector:
+    """Collects per-phase timing via httpcore trace events."""
+
+    def __init__(self) -> None:
+        self.marks: dict[str, float] = {}
+        self.dns_ms: float = 0
+        self.connect_ms: float = 0
+        self.tls_ms: float = 0
+        self.server_processing_ms: float = 0
+        self.transfer_ms: float = 0
+
+    async def trace(self, name: str, info: dict) -> None:  # noqa: ARG002, ANN401
+        now = time.perf_counter()
+        if name == "connection.connect_tcp.started":
+            self.marks["tcp_start"] = now
+        elif name == "connection.connect_tcp.complete":
+            self.connect_ms = (now - self.marks.get("tcp_start", now)) * 1000
+        elif name == "connection.start_tls.started":
+            self.marks["tls_start"] = now
+        elif name == "connection.start_tls.complete":
+            self.tls_ms = (now - self.marks.get("tls_start", now)) * 1000
+        elif name == "http11.send_request_headers.started":
+            self.marks["send_start"] = now
+        elif name == "http11.send_request_body.complete":
+            self.marks["send_done"] = now
+        elif name == "http11.receive_response_headers.started":
+            # Fallback: if send_done not set, use send_start
+            self.marks.setdefault("send_done", self.marks.get("send_start", now))
+        elif name == "http11.receive_response_headers.complete":
+            self.server_processing_ms = (
+                now - self.marks.get("send_done", self.marks.get("send_start", now))
+            ) * 1000
+            self.marks["headers_done"] = now
+        elif name == "http11.receive_response_body.complete":
+            self.transfer_ms = (now - self.marks.get("headers_done", now)) * 1000
+        # HTTP/2 equivalents
+        elif name == "http2.send_request_headers.started":
+            self.marks["send_start"] = now
+        elif name == "http2.send_request_body.complete":
+            self.marks["send_done"] = now
+        elif name == "http2.receive_response_headers.started":
+            self.marks.setdefault("send_done", self.marks.get("send_start", now))
+        elif name == "http2.receive_response_headers.complete":
+            self.server_processing_ms = (
+                now - self.marks.get("send_done", self.marks.get("send_start", now))
+            ) * 1000
+            self.marks["headers_done"] = now
+        elif name == "http2.receive_response_body.complete":
+            self.transfer_ms = (now - self.marks.get("headers_done", now)) * 1000
 
 
 class ExecuteResponse(BaseModel):
@@ -116,8 +168,10 @@ async def execute(req: ExecuteRequest) -> ExecuteResponse:
     elif req.client_cert:
         cert_pair = (req.client_cert, req.client_cert)
 
+    # Set up timing collector for httpcore trace events.
+    collector = _TimingCollector()
+
     started = time.perf_counter()
-    connect_done = started
     try:
         transport = httpx.AsyncHTTPTransport(http2=True)
         async with httpx.AsyncClient(
@@ -127,30 +181,35 @@ async def execute(req: ExecuteRequest) -> ExecuteResponse:
             cookies=httpx_cookies,
             cert=cert_pair,
         ) as client:
-            response = await client.request(
+            request = client.build_request(
                 method=req.method,
                 url=resolved_url,
                 headers=resolved_headers,
                 params=resolved_query or None,
                 content=resolved_body.encode("utf-8") if resolved_body is not None else None,
             )
-            connect_done = time.perf_counter()
+            # Inject trace callback via httpx/httpcore request extensions.
+            request.extensions["trace"] = collector.trace
+            response = await client.send(request)
     except httpx.RequestError as exc:
         raise HTTPException(status_code=502, detail=f"transport error: {exc}") from exc
 
     finished = time.perf_counter()
     elapsed_ms = (finished - started) * 1000
 
-    # Approximate timing breakdown from httpx response.
-    # httpx doesn't expose per-phase hooks, so we derive from elapsed.
-    timing = TimingBreakdown(total_ms=round(elapsed_ms, 2))
-    if hasattr(response, "elapsed") and response.elapsed:
-        server_ms = response.elapsed.total_seconds() * 1000
-        transfer_ms = max(0, elapsed_ms - server_ms)
-        timing.transfer_ms = round(transfer_ms, 2)
-        timing.connect_ms = round(server_ms * 0.3, 2)
-        timing.tls_ms = round(server_ms * 0.2, 2) if resolved_url.startswith("https") else 0
-        timing.dns_ms = round(server_ms * 0.1, 2)
+    # Build timing breakdown from collector.
+    # DNS is approximated: total minus all measured phases.
+    measured = collector.connect_ms + collector.tls_ms + collector.server_processing_ms + collector.transfer_ms
+    dns_ms = max(0, elapsed_ms - measured) if measured > 0 else 0
+
+    timing = TimingBreakdown(
+        dns_ms=round(dns_ms, 2),
+        connect_ms=round(collector.connect_ms, 2),
+        tls_ms=round(collector.tls_ms, 2),
+        server_processing_ms=round(collector.server_processing_ms, 2),
+        transfer_ms=round(collector.transfer_ms, 2),
+        total_ms=round(elapsed_ms, 2),
+    )
 
     # Persist response cookies back to the jar.
     response_cookies = dict(response.cookies)

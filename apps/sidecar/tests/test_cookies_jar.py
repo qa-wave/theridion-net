@@ -152,3 +152,113 @@ def test_to_httpx_cookies_flat_dict() -> None:
 def test_to_httpx_cookies_empty() -> None:
     jar = CookieJar(environment_id=_ENV_ID)
     assert to_httpx_cookies(jar) == {}
+
+
+# ---------------------------------------------------------------------------
+# delete_cookie
+# ---------------------------------------------------------------------------
+
+def test_delete_cookie_existing() -> None:
+    from theridion_sidecar.cookies import delete_cookie
+
+    jar = CookieJar(
+        environment_id=_ENV_ID,
+        cookies=[
+            StoredCookie(name="a", value="1"),
+            StoredCookie(name="b", value="2"),
+        ],
+    )
+    save(jar)
+    assert delete_cookie(_ENV_ID, "a") is True
+    loaded = load(_ENV_ID)
+    assert len(loaded.cookies) == 1
+    assert loaded.cookies[0].name == "b"
+
+
+def test_delete_cookie_nonexistent() -> None:
+    from theridion_sidecar.cookies import delete_cookie
+
+    jar = CookieJar(
+        environment_id=_ENV_ID,
+        cookies=[StoredCookie(name="a", value="1")],
+    )
+    save(jar)
+    assert delete_cookie(_ENV_ID, "nope") is False
+
+
+# ---------------------------------------------------------------------------
+# set_cookie
+# ---------------------------------------------------------------------------
+
+def test_set_cookie_new() -> None:
+    from theridion_sidecar.cookies import set_cookie
+
+    cookie = StoredCookie(name="new", value="val", domain="example.com")
+    result = set_cookie(_ENV_ID, cookie)
+    assert len(result.cookies) == 1
+    assert result.cookies[0].name == "new"
+    assert result.cookies[0].domain == "example.com"
+
+
+def test_set_cookie_replace() -> None:
+    from theridion_sidecar.cookies import set_cookie
+
+    jar = CookieJar(
+        environment_id=_ENV_ID,
+        cookies=[StoredCookie(name="x", value="old", domain="a.com")],
+    )
+    save(jar)
+    updated = set_cookie(_ENV_ID, StoredCookie(name="x", value="new", domain="a.com"))
+    assert len(updated.cookies) == 1
+    assert updated.cookies[0].value == "new"
+
+
+# ---------------------------------------------------------------------------
+# list_all
+# ---------------------------------------------------------------------------
+
+def test_list_all_empty() -> None:
+    from theridion_sidecar.cookies import list_all
+
+    result = list_all()
+    assert result == {}
+
+
+def test_list_all_with_jars() -> None:
+    from theridion_sidecar.cookies import list_all
+
+    env2 = "00000000-0000-0000-0000-000000000002"
+    save(CookieJar(environment_id=_ENV_ID, cookies=[StoredCookie(name="a", value="1")]))
+    save(CookieJar(environment_id=env2, cookies=[StoredCookie(name="b", value="2")]))
+    result = list_all()
+    assert len(result) == 2
+    assert _ENV_ID in result
+    assert env2 in result
+
+
+# ---------------------------------------------------------------------------
+# StoredCookie extended fields
+# ---------------------------------------------------------------------------
+
+def test_stored_cookie_extended_fields() -> None:
+    jar = CookieJar(
+        environment_id=_ENV_ID,
+        cookies=[
+            StoredCookie(
+                name="session",
+                value="abc",
+                domain="example.com",
+                httponly=True,
+                secure=True,
+                samesite="Lax",
+                expires="2026-12-31T23:59:59Z",
+            ),
+        ],
+    )
+    save(jar)
+    loaded = load(_ENV_ID)
+    c = loaded.cookies[0]
+    assert c.httponly is True
+    assert c.secure is True
+    assert c.samesite == "Lax"
+    assert c.expires == "2026-12-31T23:59:59Z"

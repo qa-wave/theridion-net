@@ -143,8 +143,16 @@ class _FakeResponse:
         self.cookies: dict[str, str] = {}
 
 
+class _FakeRequest:
+    """Minimal stand-in for httpx.Request."""
+
+    def __init__(self, **kwargs: Any) -> None:
+        self._kwargs = kwargs
+        self.extensions: dict[str, Any] = {}
+
+
 class _FakeClient:
-    """Stand-in for httpx.AsyncClient.request that records what it got."""
+    """Stand-in for httpx.AsyncClient that records what it got."""
 
     last_kwargs: dict[str, Any] = {}
 
@@ -156,6 +164,13 @@ class _FakeClient:
 
     async def __aexit__(self, *_a: Any) -> None:
         return None
+
+    def build_request(self, **kwargs: Any) -> _FakeRequest:
+        return _FakeRequest(**kwargs)
+
+    async def send(self, request: _FakeRequest, **_kw: Any) -> _FakeResponse:
+        _FakeClient.last_kwargs = request._kwargs
+        return _FakeResponse(url=request._kwargs.get("url", ""))
 
     async def request(self, **kwargs: Any) -> _FakeResponse:
         _FakeClient.last_kwargs = kwargs

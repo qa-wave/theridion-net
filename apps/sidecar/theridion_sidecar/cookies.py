@@ -24,6 +24,10 @@ class StoredCookie(BaseModel):
     value: str
     domain: str = ""
     path: str = "/"
+    expires: str | None = None
+    httponly: bool = False
+    secure: bool = False
+    samesite: str | None = None
 
 
 class CookieJar(BaseModel):
@@ -83,6 +87,48 @@ def clear(env_id: str) -> bool:
         return False
     p.unlink()
     return True
+
+
+def delete_cookie(env_id: str, cookie_name: str) -> bool:
+    """Remove a specific cookie by name from an environment's jar."""
+    jar = load(env_id)
+    original_count = len(jar.cookies)
+    jar.cookies = [c for c in jar.cookies if c.name != cookie_name]
+    if len(jar.cookies) == original_count:
+        return False
+    save(jar)
+    return True
+
+
+def set_cookie(env_id: str, cookie: StoredCookie) -> CookieJar:
+    """Add or update a cookie in an environment's jar."""
+    jar = load(env_id)
+    # Replace if same name+domain already exists, otherwise append.
+    replaced = False
+    for i, existing in enumerate(jar.cookies):
+        if existing.name == cookie.name and existing.domain == cookie.domain:
+            jar.cookies[i] = cookie
+            replaced = True
+            break
+    if not replaced:
+        jar.cookies.append(cookie)
+    save(jar)
+    return jar
+
+
+def list_all() -> dict[str, CookieJar]:
+    """List cookie jars for all environments that have persisted cookies."""
+    d = cookies_dir()
+    result: dict[str, CookieJar] = {}
+    for p in d.glob("*.json"):
+        env_id = p.stem
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+            jar = CookieJar(**data)
+            result[env_id] = jar
+        except Exception:
+            continue
+    return result
 
 
 def to_httpx_cookies(jar: CookieJar) -> dict[str, str]:
