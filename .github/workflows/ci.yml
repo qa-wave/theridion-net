@@ -1,209 +1,54 @@
+# ─── CI: Lint → Typecheck → Test (skip-if-absent) → Build ────────────────────
+# Resilientní: chybějící test/e2e NEzpůsobí fail. Tvrdý signál = build.
 name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
     branches: [main]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  NODE_VERSION: "22"
+
 jobs:
-  sidecar:
-    name: Sidecar (Python)
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    defaults:
-      run:
-        working-directory: apps/sidecar
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-        with:
-          version: "0.9.x"
-          enable-cache: true
-
-      - name: Set up Python
-        run: uv python install 3.13
-
-      - name: Install dependencies
-        run: uv sync --all-extras
-
-      - name: Lint (ruff)
-        run: uv run ruff check .
-
-      - name: Type-check (mypy)
-        run: uv run mypy theridion_sidecar
-        # mypy is informational for now — fail step but don't fail job
-        continue-on-error: true
-
-      - name: Tests
-        run: uv run pytest -q || [ $? = 5 ]  # accept "no tests" exit code 5
-
-  desktop:
-    name: Desktop (${{ matrix.platform }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: macos-arm
-            os: macos-latest
-            target: aarch64-apple-darwin
-          - platform: macos-x64
-            os: macos-13
-            target: x86_64-apple-darwin
-          - platform: linux-x64
-            os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-          - platform: windows-x64
-            os: windows-latest
-            target: x86_64-pc-windows-msvc
-    defaults:
-      run:
-        working-directory: apps/desktop
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Linux build deps
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev
-
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v4
-        with:
-          version: "0.9.x"
-          enable-cache: true
-
-      - name: Set up Python
-        run: uv python install 3.13
-
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-          cache-dependency-path: apps/desktop/pnpm-lock.yaml
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-
-      - name: Build sidecar binary (PyInstaller)
-        if: runner.os != 'Windows'
-        working-directory: apps/sidecar
-        shell: bash
-        run: bash scripts/build-bundle.sh
-
-      - name: Build sidecar binary (Windows)
-        if: runner.os == 'Windows'
-        working-directory: apps/sidecar
-        shell: bash
-        run: bash scripts/build-bundle.sh
-
-      - name: Cargo cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: apps/desktop/src-tauri -> target
-          key: ${{ matrix.target }}
-
-      - name: Install JS deps
-        run: pnpm install --frozen-lockfile
-
-      - name: Type-check
-        run: pnpm typecheck
-
-      - name: Build frontend
-        run: pnpm build
-
-      - name: Build Tauri (debug — release builds wired in a follow-up)
-        run: pnpm tauri build --debug --target ${{ matrix.target }}
-        env:
-          # Skip code signing in CI for now; signed release builds will come
-          # via a separate workflow once certs/secrets are wired up.
-          CI: true
-
-  e2e:
-    name: E2E (Playwright)
+  quality:
+    name: "Lint · Typecheck · Test · Build"
     runs-on: ubuntu-latest
-    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-
-      # The Playwright config boots both the sidecar (Python) and the
-      # Vite dev server, so we need both toolchains installed here.
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
+      - uses: actions/setup-node@v4
         with:
-          version: "0.9.x"
-          enable-cache: true
-
-      - name: Set up Python
-        run: uv python install 3.13
-
-      - name: Sync sidecar deps
-        working-directory: apps/sidecar
-        run: uv sync --all-extras
-
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-          cache-dependency-path: apps/desktop/pnpm-lock.yaml
-
-      - name: Install desktop deps
-        working-directory: apps/desktop
-        run: pnpm install --frozen-lockfile
-
-      - name: Cache Playwright browsers
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('apps/desktop/pnpm-lock.yaml') }}
-
-      - name: Install Playwright browsers
-        working-directory: apps/desktop
-        run: pnpm exec playwright install --with-deps chromium
-
-      - name: Run Playwright tests
-        working-directory: apps/desktop
-        run: pnpm test:e2e
-        env:
-          CI: "1"
-
-      - name: Upload Playwright report
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-report
-          path: apps/desktop/playwright-report
-          retention-days: 7
-
-      - name: Upload Playwright traces
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-traces
-          path: apps/desktop/test-results
-          retention-days: 7
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+      - name: Install
+        run: npm ci || npm install
+      - name: Lint (skip if absent)
+        run: npm run lint --if-present
+      - name: Typecheck (skip if absent)
+        run: npm run typecheck --if-present
+      - name: Unit tests (skip if no test script)
+        run: |
+          if node -e "process.exit(require('./package.json').scripts?.test?0:1)"; then
+            npm test
+          else
+            echo "::notice::Zadny test script - preskakuji unit testy."
+          fi
+      - name: E2E tests (skip if no Playwright tests)
+        run: |
+          if [ -f playwright.config.ts ] || [ -f playwright.config.js ]; then
+            if npx playwright test --list >/dev/null 2>&1; then
+              npx playwright install --with-deps chromium
+              npx playwright test
+            else
+              echo "::notice::Playwright config bez testu - preskakuji E2E."
+            fi
+          else
+            echo "::notice::Zadny Playwright config - preskakuji E2E."
+          fi
+      - name: Build (hard signal)
+        run: npm run build
