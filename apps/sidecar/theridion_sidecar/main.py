@@ -84,6 +84,7 @@ from theridion_sidecar.api.idempotency_check import router as idempotency_check_
 from theridion_sidecar.api.pagination_walker import router as pagination_walker_router
 from theridion_sidecar.api.contract_drift import router as contract_drift_router
 from theridion_sidecar.api.multi_env_runner import router as multi_env_runner_router
+from theridion_sidecar.api.multi_env_runner import legacy_router as multi_env_legacy_router
 from theridion_sidecar.api.data_generator import router as data_generator_router
 from theridion_sidecar.api.waterfall import router as waterfall_router
 from theridion_sidecar.api.curl_log import router as curl_log_router
@@ -146,6 +147,7 @@ from theridion_sidecar.api.postman_export import router as postman_export_router
 from theridion_sidecar.api.sse_client import router as sse_client_router
 from theridion_sidecar.api.api_changelog import router as api_changelog_router
 from theridion_sidecar.api.regression_gen import router as regression_gen_router
+from theridion_sidecar.api.dep_graph import router as dep_graph_router
 from theridion_sidecar.api.dependency_resolver import router as dependency_resolver_router
 from theridion_sidecar.api.history import router as history_router
 from theridion_sidecar.api.openapi_import import router as openapi_import_router
@@ -156,6 +158,7 @@ from theridion_sidecar.api.body_diff import router as body_diff_router
 from theridion_sidecar.api.response_compare import router as response_compare_router
 from theridion_sidecar.api.retry import router as retry_router
 from theridion_sidecar.api.doc_generator import router as doc_generator_router
+from theridion_sidecar.api.perf_budget import router as perf_budget_router
 from theridion_sidecar.api.snippets import router as snippets_router
 
 
@@ -275,6 +278,7 @@ def create_app() -> FastAPI:
     app.include_router(pagination_walker_router)
     app.include_router(contract_drift_router)
     app.include_router(multi_env_runner_router)
+    app.include_router(multi_env_legacy_router)
     app.include_router(data_generator_router)
     app.include_router(waterfall_router)
     app.include_router(curl_log_router)
@@ -337,6 +341,7 @@ def create_app() -> FastAPI:
     app.include_router(sse_client_router)
     app.include_router(api_changelog_router)
     app.include_router(regression_gen_router)
+    app.include_router(dep_graph_router)
     app.include_router(dependency_resolver_router)
     app.include_router(response_compare_router)
     app.include_router(pipeline_router)
@@ -348,6 +353,7 @@ def create_app() -> FastAPI:
     app.include_router(body_diff_router)
     app.include_router(doc_generator_router)
     app.include_router(snippets_router)
+    app.include_router(perf_budget_router)
     return app
 
 
