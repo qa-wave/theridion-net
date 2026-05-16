@@ -265,6 +265,21 @@ async def get_callback_result() -> CallbackServerResult:
     return CallbackServerResult(status="not_running")
 
 
+@router.post("/oauth2/callback-server/stop")
+async def stop_callback_server() -> dict[str, str]:
+    """Stop the callback server if it's running."""
+    with _cb.lock:
+        if _cb.server is not None:
+            try:
+                _cb.server.server_close()
+            except Exception:
+                pass
+            _cb.server = None
+        # Mark as not running so the thread exits on next loop iteration
+        _cb.received = True
+    return {"status": "stopped"}
+
+
 @router.post("/oauth2/token", response_model=OAuth2TokenResponse)
 async def exchange_token(req: OAuth2TokenRequest) -> OAuth2TokenResponse:
     """Exchange an authorization code for tokens, with optional PKCE."""
@@ -281,6 +296,66 @@ async def exchange_token(req: OAuth2TokenRequest) -> OAuth2TokenResponse:
         form_data["scope"] = req.scope
     if req.code_verifier:
         form_data["code_verifier"] = req.code_verifier
+
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.post(req.token_url, data=form_data)
+    except httpx.RequestError as exc:
+        raise HTTPException(
+            status_code=502, detail=f"token endpoint unreachable: {exc}"
+        ) from exc
+
+    if response.status_code >= 400:
+        raise HTTPException(
+            status_code=response.status_code,
+            detail=f"token endpoint error: {response.text}",
+        )
+
+    try:
+        body = response.json()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502, detail=f"invalid JSON from token endpoint: {exc}"
+        ) from exc
+
+    if "access_token" not in body:
+        raise HTTPException(
+            status_code=502,
+            detail=f"no access_token in response: {body}",
+        )
+
+    return OAuth2TokenResponse(
+        access_token=body["access_token"],
+        token_type=body.get("token_type", "Bearer"),
+        expires_in=body.get("expires_in"),
+        refresh_token=body.get("refresh_token"),
+        scope=body.get("scope"),
+        raw=body,
+    )
+
+
+class OAuth2RefreshRequest(BaseModel):
+    """Parameters for the OAuth2 refresh_token grant."""
+
+    token_url: str = Field(..., min_length=1)
+    refresh_token: str = Field(..., min_length=1)
+    client_id: str = Field(..., min_length=1)
+    client_secret: str = ""
+    scope: str = ""
+
+
+@router.post("/oauth2/refresh", response_model=OAuth2TokenResponse)
+async def refresh_token(req: OAuth2RefreshRequest) -> OAuth2TokenResponse:
+    """Use a refresh token to obtain a new access token."""
+    form_data: dict[str, str] = {
+        "grant_type": "refresh_token",
+        "refresh_token": req.refresh_token,
+        "client_id": req.client_id,
+    }
+    if req.client_secret:
+        form_data["client_secret"] = req.client_secret
+    if req.scope:
+        form_data["scope"] = req.scope
 
     try:
         async with httpx.AsyncClient(timeout=30) as client:
