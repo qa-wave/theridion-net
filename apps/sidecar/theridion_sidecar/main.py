@@ -59,6 +59,7 @@ from theridion_sidecar.api.soap import router as soap_router
 from theridion_sidecar.api.testgen import router as testgen_router
 from theridion_sidecar.api.timeline import router as timeline_router
 from theridion_sidecar.api.websocket import router as websocket_router
+from theridion_sidecar.api.ws_advanced import router as ws_advanced_router
 from theridion_sidecar.api.workspace import router as workspace_router
 from theridion_sidecar.api.response_trends import router as response_trends_router
 from theridion_sidecar.api.security_audit import router as security_audit_router
@@ -149,8 +150,10 @@ from theridion_sidecar.api.openapi_import import router as openapi_import_router
 from theridion_sidecar.api.pipeline import router as pipeline_router
 from theridion_sidecar.api.certificates import router as certificates_router
 from theridion_sidecar.api.reports import router as reports_router
+from theridion_sidecar.api.body_diff import router as body_diff_router
 from theridion_sidecar.api.response_compare import router as response_compare_router
 from theridion_sidecar.api.retry import router as retry_router
+from theridion_sidecar.api.doc_generator import router as doc_generator_router
 
 
 class _TokenAuthMiddleware(BaseHTTPMiddleware):
@@ -222,6 +225,7 @@ def create_app() -> FastAPI:
     app.include_router(cookies_router)
     app.include_router(curl_router)
     app.include_router(websocket_router)
+    app.include_router(ws_advanced_router)
     app.include_router(diagnostics_router)
     app.include_router(multipart_router)
     app.include_router(oauth2_router)
@@ -336,6 +340,8 @@ def create_app() -> FastAPI:
     app.include_router(certificates_router)
     app.include_router(reports_router)
     app.include_router(retry_router)
+    app.include_router(body_diff_router)
+    app.include_router(doc_generator_router)
     return app
 
 
