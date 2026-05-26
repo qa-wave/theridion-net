@@ -13,7 +13,7 @@ dependencies = [
     "uvicorn[standard]>=0.32",
     "httpx[http2]>=0.28",
     "pydantic>=2.10",
-    "zeep>=4.3.2",
+    "zeep[xmlsec]>=4.3.2",
     "aiokafka>=0.14.0",
     "grpcio>=1.80.0",
     "grpcio-reflection>=1.80.0",
@@ -25,6 +25,10 @@ dependencies = [
     "mcp>=1.27.1",
     "jsonpath-ng>=1.8.0",
     "lxml>=6.1.0",
+    "paho-mqtt>=2.1.0",
+    "psycopg2-binary>=2.9",
+    "stomp-py>=8.1",
+    "grpcio-tools>=1.80.0",
 ]
 
 [dependency-groups]

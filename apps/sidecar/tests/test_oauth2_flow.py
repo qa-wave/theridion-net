@@ -1,4 +1,4 @@
-"""Tests for the OAuth2 PKCE flow endpoints."""
+"""Tests for OAuth2 endpoints: PKCE, client_credentials, token reuse, password grant."""
 
 from __future__ import annotations
 
@@ -14,12 +14,31 @@ from fastapi.testclient import TestClient
 from theridion_sidecar.api.oauth2 import generate_pkce, _cb
 from theridion_sidecar.main import create_app
 
+# ---------------------------------------------------------------------------
+# Shared mock helper
+# ---------------------------------------------------------------------------
+
+
+def _make_mock_client(json_body: dict, status_code: int = 200):
+    """Return an AsyncMock for httpx.AsyncClient whose post() returns the given body."""
+    mock_response = httpx.Response(status_code, json=json_body)
+    mock_instance = AsyncMock()
+    mock_instance.post = AsyncMock(return_value=mock_response)
+    mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+    mock_instance.__aexit__ = AsyncMock(return_value=None)
+    return mock_instance
+
 
 @pytest.fixture()
-def client():
-    app = create_app()
-    with TestClient(app) as c:
-        yield c
+def client(tmp_path, monkeypatch):
+    """OAuth2 test client with auth token and isolated home directory."""
+    monkeypatch.setenv("THERIDION_HOME", str(tmp_path))
+    import theridion_sidecar.main as _main
+    monkeypatch.setattr(_main, "_SIDECAR_TOKEN", "test-token-fixture")
+    app = _main.create_app()
+    tc = TestClient(app)
+    tc.headers["X-Theridion-Token"] = "test-token-fixture"
+    yield tc
 
 
 @pytest.fixture(autouse=True)
@@ -323,3 +342,326 @@ class TestTokenRefresh:
             })
 
         assert resp.status_code == 401
+
+
+class TestRefreshRotation:
+    """Test that refresh token rotation (RFC 6749 §6) is handled correctly."""
+
+    def test_rotation_new_refresh_token_is_returned(self, client: TestClient):
+        """When server returns a new refresh_token, the new one is in the response."""
+        with patch("theridion_sidecar.api.oauth2.httpx.AsyncClient") as mock_cls:
+            mock_cls.return_value = _make_mock_client({
+                "access_token": "new-access",
+                "token_type": "Bearer",
+                "expires_in": 3600,
+                "refresh_token": "rotated-refresh-token",
+            })
+            resp = client.post("/api/auth/oauth2/refresh", json={
+                "token_url": "https://example.com/token",
+                "refresh_token": "old-refresh-token",
+                "client_id": "my-client",
+            })
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["refresh_token"] == "rotated-refresh-token"
+
+    def test_rotation_fallback_to_original_when_server_omits_refresh(
+        self, client: TestClient
+    ):
+        """When server does NOT return refresh_token, the original is preserved."""
+        with patch("theridion_sidecar.api.oauth2.httpx.AsyncClient") as mock_cls:
+            mock_cls.return_value = _make_mock_client({
+                "access_token": "new-access",
+                "token_type": "Bearer",
+                "expires_in": 3600,
+                # no refresh_token in response
+            })
+            resp = client.post("/api/auth/oauth2/refresh", json={
+                "token_url": "https://example.com/token",
+                "refresh_token": "original-refresh",
+                "client_id": "my-client",
+            })
+
+        assert resp.status_code == 200
+        data = resp.json()
+        # Original refresh token should be preserved (rotation: fall-back)
+        assert data["refresh_token"] == "original-refresh"
+
+
+class TestClientCredentials:
+    """Tests for the Client Credentials grant."""
+
+    def test_basic_client_credentials(self, client: TestClient):
+        with patch("theridion_sidecar.api.oauth2.httpx.AsyncClient") as mock_cls:
+            mock_cls.return_value = _make_mock_client({
+                "access_token": "cc-access-token",
+                "token_type": "Bearer",
+                "expires_in": 3600,
+                "scope": "read write",
+            })
+            resp = client.post("/api/auth/oauth2/client-credentials", json={
+                "token_url": "https://example.com/token",
+                "client_id": "service-client",
+                "client_secret": "super-secret",
+                "scope": "read write",
+            })
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["access_token"] == "cc-access-token"
+        assert data["expires_in"] == 3600
+        assert data["expires_at"] is not None
+
+    def test_client_credentials_expires_at_is_future(self, client: TestClient):
+        """expires_at must be in the future."""
+        before = time.time()
+        with patch("theridion_sidecar.api.oauth2.httpx.AsyncClient") as mock_cls:
+            mock_cls.return_value = _make_mock_client({
+                "access_token": "tok",
+                "token_type": "Bearer",
+                "expires_in": 3600,
+            })
+            resp = client.post("/api/auth/oauth2/client-credentials", json={
+                "token_url": "https://example.com/token",
+                "client_id": "svc",
+                "client_secret": "secret",
+            })
+        after = time.time()
+
+        assert resp.status_code == 200
+        expires_at = resp.json()["expires_at"]
+        assert before + 3600 <= expires_at <= after + 3600
+
+    def test_client_credentials_basic_auth(self, client: TestClient):
+        """When use_basic_auth=True, credentials must not appear in form body."""
+        captured: dict = {}
+
+        async def _fake_post(url, *, data=None, headers=None, **kwargs):
+            captured["headers"] = headers or {}
+            captured["data"] = data or {}
+            return httpx.Response(200, json={"access_token": "tok", "token_type": "Bearer"})
+
+        with patch("theridion_sidecar.api.oauth2.httpx.AsyncClient") as mock_cls:
+            mock_instance = AsyncMock()
+            mock_instance.post = _fake_post
+            mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+            mock_instance.__aexit__ = AsyncMock(return_value=None)
+            mock_cls.return_value = mock_instance
+
+            resp = client.post("/api/auth/oauth2/client-credentials", json={
+                "token_url": "https://example.com/token",
+                "client_id": "svc",
+                "client_secret": "svc-secret",
+                "use_basic_auth": True,
+            })
+
+        assert resp.status_code == 200
+        assert "Authorization" in captured["headers"]
+        assert captured["headers"]["Authorization"].startswith("Basic ")
+        assert "client_id" not in captured["data"]
+        assert "client_secret" not in captured["data"]
+
+    def test_client_credentials_extra_params(self, client: TestClient):
+        """Extra params (e.g. audience) are forwarded in the form body."""
+        captured: dict = {}
+
+        async def _fake_post(url, *, data=None, headers=None, **kwargs):
+            captured["data"] = data or {}
+            return httpx.Response(200, json={"access_token": "tok", "token_type": "Bearer"})
+
+        with patch("theridion_sidecar.api.oauth2.httpx.AsyncClient") as mock_cls:
+            mock_instance = AsyncMock()
+            mock_instance.post = _fake_post
+            mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+            mock_instance.__aexit__ = AsyncMock(return_value=None)
+            mock_cls.return_value = mock_instance
+
+            resp = client.post("/api/auth/oauth2/client-credentials", json={
+                "token_url": "https://example.com/token",
+                "client_id": "svc",
+                "client_secret": "svc-secret",
+                "extra_params": {"audience": "https://api.example.com"},
+            })
+
+        assert resp.status_code == 200
+        assert captured["data"].get("audience") == "https://api.example.com"
+
+    def test_client_credentials_error_response(self, client: TestClient):
+        with patch("theridion_sidecar.api.oauth2.httpx.AsyncClient") as mock_cls:
+            mock_cls.return_value = _make_mock_client(
+                {"error": "invalid_client"}, status_code=401
+            )
+            resp = client.post("/api/auth/oauth2/client-credentials", json={
+                "token_url": "https://example.com/token",
+                "client_id": "bad-svc",
+                "client_secret": "wrong",
+            })
+        assert resp.status_code == 401
+
+    def test_client_credentials_no_expires_in(self, client: TestClient):
+        """If token endpoint omits expires_in, expires_at should be None."""
+        with patch("theridion_sidecar.api.oauth2.httpx.AsyncClient") as mock_cls:
+            mock_cls.return_value = _make_mock_client({
+                "access_token": "tok",
+                "token_type": "Bearer",
+                # no expires_in
+            })
+            resp = client.post("/api/auth/oauth2/client-credentials", json={
+                "token_url": "https://example.com/token",
+                "client_id": "svc",
+                "client_secret": "secret",
+            })
+        assert resp.status_code == 200
+        assert resp.json()["expires_at"] is None
+
+
+class TestTokenReuse:
+    """Tests for the token-reuse / auto-refresh endpoint."""
+
+    def test_valid_token_returned_as_is(self, client: TestClient):
+        future = time.time() + 3600
+        resp = client.post("/api/auth/oauth2/token-reuse", json={
+            "access_token": "my-token",
+            "expires_at": future,
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "valid"
+        assert data["access_token"] == "my-token"
+
+    def test_expired_token_no_refresh_returns_expired(self, client: TestClient):
+        past = time.time() - 100
+        resp = client.post("/api/auth/oauth2/token-reuse", json={
+            "access_token": "old-token",
+            "expires_at": past,
+            # no refresh_token / token_url
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "expired"
+
+    def test_expired_token_with_refresh_is_refreshed(self, client: TestClient):
+        past = time.time() - 100
+        with patch("theridion_sidecar.api.oauth2.httpx.AsyncClient") as mock_cls:
+            mock_cls.return_value = _make_mock_client({
+                "access_token": "fresh-token",
+                "token_type": "Bearer",
+                "expires_in": 3600,
+                "refresh_token": "new-rt",
+            })
+            resp = client.post("/api/auth/oauth2/token-reuse", json={
+                "access_token": "old-token",
+                "refresh_token": "old-rt",
+                "expires_at": past,
+                "token_url": "https://example.com/token",
+                "client_id": "my-client",
+                "client_secret": "secret",
+            })
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "refreshed"
+        assert data["access_token"] == "fresh-token"
+        assert data["refresh_token"] == "new-rt"
+
+    def test_unknown_status_for_token_without_expiry(self, client: TestClient):
+        resp = client.post("/api/auth/oauth2/token-reuse", json={
+            "access_token": "unknown-expiry-token",
+            # expires_at not set
+        })
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "unknown"
+
+    def test_empty_access_token_is_expired(self, client: TestClient):
+        future = time.time() + 3600
+        resp = client.post("/api/auth/oauth2/token-reuse", json={
+            "access_token": "",
+            "expires_at": future,
+        })
+        assert resp.status_code == 200
+        # No access_token at all → can't be valid
+        assert resp.json()["status"] == "expired"
+
+    def test_expiry_buffer_respected(self, client: TestClient):
+        """Token that expires within buffer window is treated as expired."""
+        # expires 30 s from now — within default 60 s buffer
+        near_future = time.time() + 30
+        resp = client.post("/api/auth/oauth2/token-reuse", json={
+            "access_token": "almost-expired",
+            "expires_at": near_future,
+            "expiry_buffer_seconds": 60,
+        })
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "expired"
+
+    def test_expired_token_refresh_fails_gracefully(self, client: TestClient):
+        """If refresh call fails, status is 'expired' with message."""
+        past = time.time() - 100
+        with patch("theridion_sidecar.api.oauth2.httpx.AsyncClient") as mock_cls:
+            mock_cls.return_value = _make_mock_client(
+                {"error": "invalid_grant"}, status_code=400
+            )
+            resp = client.post("/api/auth/oauth2/token-reuse", json={
+                "access_token": "old",
+                "refresh_token": "bad-rt",
+                "expires_at": past,
+                "token_url": "https://example.com/token",
+                "client_id": "my-client",
+            })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "expired"
+        assert "refresh failed" in data["message"]
+
+
+class TestPasswordGrant:
+    """Tests for the (deprecated) Resource Owner Password Credentials grant."""
+
+    def test_password_grant_success(self, client: TestClient):
+        with patch("theridion_sidecar.api.oauth2.httpx.AsyncClient") as mock_cls:
+            mock_cls.return_value = _make_mock_client({
+                "access_token": "password-grant-token",
+                "token_type": "Bearer",
+                "expires_in": 1800,
+                "refresh_token": "pwd-rt",
+            })
+            resp = client.post("/api/auth/oauth2/password", json={
+                "token_url": "https://legacy.example.com/token",
+                "username": "user@example.com",
+                "password": "hunter2",
+                "client_id": "legacy-app",
+                "scope": "profile",
+            })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["access_token"] == "password-grant-token"
+        assert data["refresh_token"] == "pwd-rt"
+
+    def test_password_grant_error(self, client: TestClient):
+        with patch("theridion_sidecar.api.oauth2.httpx.AsyncClient") as mock_cls:
+            mock_cls.return_value = _make_mock_client(
+                {"error": "invalid_grant"}, status_code=401
+            )
+            resp = client.post("/api/auth/oauth2/password", json={
+                "token_url": "https://legacy.example.com/token",
+                "username": "bad-user",
+                "password": "wrong",
+                "client_id": "legacy-app",
+            })
+        assert resp.status_code == 401
+
+    def test_password_grant_with_client_secret(self, client: TestClient):
+        with patch("theridion_sidecar.api.oauth2.httpx.AsyncClient") as mock_cls:
+            mock_cls.return_value = _make_mock_client({
+                "access_token": "tok",
+                "token_type": "Bearer",
+            })
+            resp = client.post("/api/auth/oauth2/password", json={
+                "token_url": "https://legacy.example.com/token",
+                "username": "admin",
+                "password": "adminpass",
+                "client_id": "conf-client",
+                "client_secret": "conf-secret",
+            })
+        assert resp.status_code == 200

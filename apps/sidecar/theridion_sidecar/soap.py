@@ -8,11 +8,14 @@ non-blocking I/O.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from pydantic import BaseModel
 from zeep import Client
 from zeep.helpers import serialize_object
+
+log = logging.getLogger(__name__)
 
 
 class SoapOperation(BaseModel):
@@ -74,9 +77,8 @@ def inspect_wsdl(wsdl_url: str) -> WsdlSummary:
     # zeep's Document has no single target_namespace attr in 4.x — try a
     # few likely names, otherwise pull it from the first service's
     # binding's portType for a reasonable approximation.
-    tns = (
-        getattr(client.wsdl, "target_namespace", None)
-        or getattr(client.wsdl, "tns", None)
+    tns = getattr(client.wsdl, "target_namespace", None) or getattr(
+        client.wsdl, "tns", None
     )
     if tns is None:
         try:
@@ -92,15 +94,23 @@ def inspect_wsdl(wsdl_url: str) -> WsdlSummary:
 
 
 def execute_operation(
-    wsdl_url: str, operation: str, args: dict[str, Any]
+    wsdl_url: str,
+    operation: str,
+    args: dict[str, Any],
+    wsse_plugin: Any = None,
 ) -> Any:
     """Invoke a SOAP operation by name with the given keyword args.
+
+    If *wsse_plugin* is provided it is attached to the zeep Client so that
+    zeep automatically adds the WS-Security header to every request.  The
+    plugin must implement the ``apply(envelope, headers)`` / ``verify(envelope)``
+    protocol from ``zeep.wsse``.
 
     Returns a JSON-serializable representation of the response. Network,
     schema, and SOAP faults bubble up as exceptions for the caller to
     translate into a meaningful HTTP response.
     """
-    client = Client(wsdl=wsdl_url)
+    client = Client(wsdl=wsdl_url, wsse=wsse_plugin)
     callable_ = getattr(client.service, operation, None)
     if callable_ is None:
         raise ValueError(f"operation {operation!r} not found in WSDL")
