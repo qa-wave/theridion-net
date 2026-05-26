@@ -252,7 +252,7 @@ export const spinMethods = {
     output_path: string;
   }) => post("/api/spin/contract/record", input),
 
-  validateSchema: (input: SpinSchemaValidateInput): Promise<SpinSchemaValidateOutput> =>
+  spinValidateSchema: (input: SpinSchemaValidateInput): Promise<SpinSchemaValidateOutput> =>
     post("/api/spin/schemas/validate", input),
 
   dbSnapshot: (input: SpinDbSnapshotInput): Promise<SpinDbSnapshotOutput> =>

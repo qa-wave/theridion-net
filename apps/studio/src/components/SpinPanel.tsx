@@ -22,7 +22,6 @@ import {
   CheckCircle2,
   ChevronRight,
   Circle,
-  Clock,
   Code2,
   Database,
   FileCode2,
@@ -318,7 +317,6 @@ export function SpinPanel() {
   const [dryRunResult, setDryRunResult] = useState<SpinDryRunOutput | null>(null);
   const [runResult, setRunResult] = useState<SpinRunResult | null>(null);
   const [isRunning, setIsRunning] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
   const [activeTab, setActiveTab] = useState<"trace" | "contracts" | "schema" | "db">("trace");
   const dryRunTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -753,7 +751,7 @@ function SchemaTab() {
         setResult({ valid: false, errors: ["Invalid JSON payload"] });
         return;
       }
-      const input: Parameters<typeof sidecar.validateSchema>[0] = {
+      const input: Parameters<typeof sidecar.spinValidateSchema>[0] = {
         payload: parsedPayload,
         schema_ref: schemaRef,
       };
@@ -765,7 +763,7 @@ function SchemaTab() {
           return;
         }
       }
-      const r = await sidecar.validateSchema(input);
+      const r = await sidecar.spinValidateSchema(input);
       setResult(r);
     } finally {
       setIsValidating(false);

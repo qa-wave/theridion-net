@@ -74,6 +74,8 @@ import { ToastContainer, type Toast } from "./components/Toast";
 import { EventToastContainer } from "./components/EventToast";
 import { ReleaseCenterModal } from "./components/ReleaseCenterModal";
 import { SpinPanel } from "./components/SpinPanel";
+import { SilkPanel } from "./components/SilkPanel";
+import { HubOverviewPanel } from "./components/HubOverviewPanel";
 
 const APP_VERSION = "0.0.1";
 const ACTIVE_ENV_KEY = "theridion.activeEnvironmentId";
@@ -1247,6 +1249,21 @@ export default function App() {
       {appMode === "spin" && (
         <div className="col-span-2 overflow-hidden">
           <SpinPanel />
+        </div>
+      )}
+
+      {appMode === "silk" && (
+        <div className="col-span-2 overflow-hidden">
+          <SilkPanel onToast={addToast} />
+        </div>
+      )}
+
+      {appMode === "hubOverview" && (
+        <div className="col-span-2 overflow-hidden">
+          <HubOverviewPanel
+            onOpenCollection={(_id) => setAppMode("requests")}
+            onOpenSettings={() => modals.open("settings")}
+          />
         </div>
       )}
 
