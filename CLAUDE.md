@@ -1,3 +1,46 @@
+## Project metadata
+
+| Klíč | Hodnota |
+|---|---|
+| **Name** | `theridion` |
+| **Group** | `qa-tooling` |
+| **Team folder** | [./Team/](./Team/) — agenti, ctx2skill wrapper, reporty |
+| **Second brain** | [./second-brain/](./second-brain/) — Karpathy LLM Wiki (raw/ → wiki/) |
+| **Wiki** | [./wiki/](./wiki/) — kurátorovaná dokumentace (DOMAIN, ARCH, ADR, RUNBOOK) |
+| **ctx2skill** | `bash Team/ctx2skill/run.sh` → `/Users/tm/tools/ctx2skill/` |
+| **Inter-project** | viz [Team/MCP-USAGE.md](./Team/MCP-USAGE.md) + [workspace INTER-PROJECT-COMMS.md](/Users/tm/workspaces/INTER-PROJECT-COMMS.md) |
+| **Agents** | viz [Team/PROJECT-ROLES.md](./Team/PROJECT-ROLES.md) — definice v [Team/agents/](./Team/agents/) |
+
+---
+
+## Session start
+
+Před první akcí v této session **přečti** v tomto pořadí:
+
+1. `memory/soul.md` — kdo tento projekt je (identita, mantinely)
+2. `memory/user.md` — kdo je Tomáš v kontextu tohoto projektu
+3. `memory/agents.md` — SOPs (jak se v tomto projektu dělají věci)
+4. `memory/memory.md` — index čerstvé paměti
+5. `wiki/01-DOMAIN.md` — co projekt řeší
+6. `Team/PROJECT-ROLES.md` — kteří agenti jsou k dispozici
+
+Quick slash commands:
+
+- **`/start`** — kompletní onboarding (load all + status report)
+- **`/deploy`** — deploy workflow (dev / preview / prod)
+- **`/test`** — spuštění test stacku
+- **`/memory`** — append do dnešní daily memory
+
+Per-projekt session izolace:
+
+- `.claude/settings.local.json` — allow-list, env, hooks
+- `.claude/commands/` — slash commands
+- `.claude/agents/` — standard Claude Code agenti
+- `memory/` — working memory (soul / user / agents / memory + daily)
+
+---
+
+
 # Theridion — kontext pro Claude
 
 Modern, file-based, open-source API testing platform. Pozicování:
