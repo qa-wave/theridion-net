@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import atexit
 import os
+import secrets
 import socket
 import sys
 
@@ -43,6 +44,7 @@ from theridion_sidecar.api.grpc_api import router as grpc_router
 from theridion_sidecar.api.health import router as health_router
 from theridion_sidecar.api.importer import router as importer_router
 from theridion_sidecar.api.kafka import router as kafka_router
+from theridion_sidecar.api.mqtt_client import router as mqtt_router
 from theridion_sidecar.api.load_runner import router as load_runner_router
 from theridion_sidecar.api.loadtest import router as loadtest_router
 from theridion_sidecar.api.mock import router as mock_router
@@ -51,6 +53,7 @@ from theridion_sidecar.api.mock_record import router as mock_record_router
 from theridion_sidecar.api.multipart import router as multipart_router
 from theridion_sidecar.api.oauth2 import router as oauth2_router
 from theridion_sidecar.api.projects import router as projects_router
+from theridion_sidecar.api.product_ops import router as product_ops_router
 from theridion_sidecar.api.requests import router as requests_router
 from theridion_sidecar.api.runner import router as runner_router
 from theridion_sidecar.api.schema_validation import router as schema_router
@@ -101,6 +104,7 @@ from theridion_sidecar.api.mtom import router as mtom_router
 from theridion_sidecar.api.wsdl_refactor import router as wsdl_refactor_router
 from theridion_sidecar.api.soap_coverage import router as soap_coverage_router
 from theridion_sidecar.api.jdbc_query import router as jdbc_query_router
+from theridion_sidecar.api.jms_client import router as jms_client_router
 from theridion_sidecar.api.xsd_validator import router as xsd_validator_router
 from theridion_sidecar.api.wsdl_mock_gen import router as wsdl_mock_gen_router
 from theridion_sidecar.api.oauth1 import router as oauth1_router
@@ -168,24 +172,44 @@ from theridion_sidecar.api.collection_stats import router as collection_stats_ro
 from theridion_sidecar.api.header_insights import router as header_insights_router
 from theridion_sidecar.api.body_search import router as body_search_router
 from theridion_sidecar.api.template_engine import router as template_engine_router
+from theridion_sidecar.api.camel import router as camel_router
+from theridion_sidecar.api.camel_runner import router as camel_runner_router
+
+
+_EXEMPT_PATHS = {"/api/health", "/api/diagnostics"}
+
+# Module-level token — generated once at import time so it survives
+# create_app() being called multiple times (e.g. in tests that use
+# THERIDION_TOKEN override via env).
+#
+# Tests may override this with monkeypatch.setattr(main, "_SIDECAR_TOKEN", value)
+# or by setting THERIDION_TOKEN *before* this module is first imported.
+_SIDECAR_TOKEN: str = os.environ.get("THERIDION_TOKEN") or secrets.token_urlsafe(32)
+
+
+def get_sidecar_token() -> str:
+    """Return the active auth token (for inclusion in the ready line)."""
+    return _SIDECAR_TOKEN
 
 
 class _TokenAuthMiddleware(BaseHTTPMiddleware):
     """Reject requests without a valid X-Theridion-Token header.
 
-    Only active when THERIDION_TOKEN env var is set.  /api/health is
-    exempt so liveness probes keep working.
+    Always active (not gated on an env var).  Paths in _EXEMPT_PATHS
+    (health + diagnostics) are let through so Tauri probes and debug
+    calls work without a token.
+
+    The token is read from the module-level _SIDECAR_TOKEN on every
+    request (lazy lookup) so that test fixtures can monkeypatch
+    _SIDECAR_TOKEN after module import without having to reconstruct
+    the app.
     """
 
-    def __init__(self, app: FastAPI, token: str) -> None:  # type: ignore[override]
-        super().__init__(app)
-        self._token = token
-
     async def dispatch(self, request: Request, call_next):  # type: ignore[override]
-        if request.url.path == "/api/health":
+        if request.url.path in _EXEMPT_PATHS:
             return await call_next(request)
         provided = request.headers.get("X-Theridion-Token", "")
-        if provided != self._token:
+        if provided != _SIDECAR_TOKEN:
             return JSONResponse(
                 status_code=401,
                 content={"detail": "invalid or missing X-Theridion-Token"},
@@ -218,9 +242,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    _token = os.environ.get("THERIDION_TOKEN")
-    if _token:
-        app.add_middleware(_TokenAuthMiddleware, token=_token)
+    app.add_middleware(_TokenAuthMiddleware)
 
     app.include_router(ai_router)
     app.include_router(health_router)
@@ -235,6 +257,7 @@ def create_app() -> FastAPI:
     app.include_router(environments_router)
     app.include_router(globals_router)
     app.include_router(kafka_router)
+    app.include_router(mqtt_router)
     app.include_router(graphql_router)
     app.include_router(soap_router)
     app.include_router(cookies_router)
@@ -245,6 +268,7 @@ def create_app() -> FastAPI:
     app.include_router(multipart_router)
     app.include_router(oauth2_router)
     app.include_router(projects_router)
+    app.include_router(product_ops_router)
     app.include_router(grpc_router)
     app.include_router(mock_router)
     app.include_router(mock_record_router)
@@ -303,6 +327,7 @@ def create_app() -> FastAPI:
     app.include_router(wsdl_refactor_router)
     app.include_router(soap_coverage_router)
     app.include_router(jdbc_query_router)
+    app.include_router(jms_client_router)
     app.include_router(xsd_validator_router)
     app.include_router(wsdl_mock_gen_router)
     app.include_router(oauth1_router)
@@ -370,6 +395,8 @@ def create_app() -> FastAPI:
     app.include_router(header_insights_router)
     app.include_router(body_search_router)
     app.include_router(template_engine_router)
+    app.include_router(camel_router)
+    app.include_router(camel_runner_router)
     return app
 
 
@@ -414,7 +441,7 @@ def main() -> None:
     # gymnastics.
     print(
         f"THERIDION_SIDECAR_READY pid={os.getpid()} port={port} "
-        f"home={storage.home_dir()}",
+        f"token={_SIDECAR_TOKEN} home={storage.home_dir()}",
         flush=True,
     )
     uvicorn.run(

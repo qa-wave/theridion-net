@@ -15,6 +15,7 @@ import pytest
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 
+from tests.conftest import _NO_AUTO_TOKEN
 from theridion_sidecar.main import create_app
 
 
@@ -303,6 +304,9 @@ class TestInjection:
 # ============================================================
 
 
+_SECURITY_TEST_TOKEN = "super-secret-token-123"
+
+
 class TestAuthToken:
     """Test the X-Theridion-Token middleware behavior.
 
@@ -311,52 +315,64 @@ class TestAuthToken:
     """
 
     @pytest.fixture()
-    def authed_client(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
-        monkeypatch.setenv("THERIDION_HOME", str(tmp_path))
-        monkeypatch.setenv("THERIDION_TOKEN", "super-secret-token-123")
-        app = create_app()
-        return TestClient(app)
+    def raw_app(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
+        """TestClient WITHOUT any default token — used to verify 401 paths.
 
-    def test_request_rejected_without_token(self, authed_client: TestClient) -> None:
+        We patch _SIDECAR_TOKEN to a known value so the middleware accepts
+        _SECURITY_TEST_TOKEN, and we deliberately do NOT inject the default
+        test-token-fixture header so 401 tests can work as expected.
+        """
+        monkeypatch.setenv("THERIDION_HOME", str(tmp_path))
+        import theridion_sidecar.main as _main
+        monkeypatch.setattr(_main, "_SIDECAR_TOKEN", _SECURITY_TEST_TOKEN)
+        # Pass _NO_AUTO_TOKEN sentinel to skip conftest auto-inject.
+        return TestClient(create_app(), headers=_NO_AUTO_TOKEN)
+
+    @pytest.fixture()
+    def authed_client(self, raw_app: TestClient) -> TestClient:
+        """Alias kept for backward compat — same as raw_app but explicit."""
+        return raw_app
+
+    def test_request_rejected_without_token(self, raw_app: TestClient) -> None:
         """Requests without X-Theridion-Token must be rejected with 401."""
-        resp = authed_client.get("/api/collections")
+        resp = raw_app.get("/api/collections")
         assert resp.status_code == 401
 
-    def test_request_rejected_with_wrong_token(self, authed_client: TestClient) -> None:
+    def test_request_rejected_with_wrong_token(self, raw_app: TestClient) -> None:
         """Wrong token value must be rejected."""
-        resp = authed_client.get(
+        resp = raw_app.get(
             "/api/collections",
             headers={"X-Theridion-Token": "wrong-token"},
         )
         assert resp.status_code == 401
 
-    def test_health_exempt_from_auth(self, authed_client: TestClient) -> None:
+    def test_health_exempt_from_auth(self, raw_app: TestClient) -> None:
         """/api/health must work without a token (liveness probe)."""
-        resp = authed_client.get("/api/health")
+        resp = raw_app.get("/api/health")
         assert resp.status_code == 200
 
-    def test_valid_token_allows_access(self, authed_client: TestClient) -> None:
+    def test_valid_token_allows_access(self, raw_app: TestClient) -> None:
         """Correct token must grant access."""
-        resp = authed_client.get(
+        resp = raw_app.get(
             "/api/collections",
-            headers={"X-Theridion-Token": "super-secret-token-123"},
+            headers={"X-Theridion-Token": _SECURITY_TEST_TOKEN},
         )
         assert resp.status_code == 200
 
-    def test_token_not_in_error_response(self, authed_client: TestClient) -> None:
+    def test_token_not_in_error_response(self, raw_app: TestClient) -> None:
         """Error responses must not leak the expected token value.
         Attack: brute-force by comparing error messages for token hints."""
-        resp = authed_client.get(
+        resp = raw_app.get(
             "/api/collections",
             headers={"X-Theridion-Token": "wrong"},
         )
         assert resp.status_code == 401
         body = resp.text
-        assert "super-secret-token-123" not in body
+        assert _SECURITY_TEST_TOKEN not in body
 
-    def test_empty_token_rejected(self, authed_client: TestClient) -> None:
+    def test_empty_token_rejected(self, raw_app: TestClient) -> None:
         """Empty string token must not match a configured token."""
-        resp = authed_client.get(
+        resp = raw_app.get(
             "/api/collections",
             headers={"X-Theridion-Token": ""},
         )
