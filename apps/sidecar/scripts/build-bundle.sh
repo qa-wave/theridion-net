@@ -17,7 +17,7 @@ if [[ -z "$TARGET" ]]; then
   exit 1
 fi
 
-OUT="../desktop/src-tauri/binaries"
+OUT="../studio/src-tauri/binaries"
 mkdir -p "$OUT"
 
 uv sync --all-extras
