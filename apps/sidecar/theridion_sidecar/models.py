@@ -20,6 +20,11 @@ HttpMethod = Literal[
 
 AuthType = Literal["none", "bearer", "basic", "apikey"]
 
+# Silk (frontend testing) item kind — stored alongside regular requests in a
+# collection so failed API requests can point to a Playwright spec that
+# reproduces the failure.
+CollectionItemKind = Literal["request", "playwright_spec"]
+
 
 class AuthConfig(BaseModel):
     """Authentication configuration attached to a request."""
@@ -58,11 +63,20 @@ class RequestCapture(BaseModel):
 
 
 class CollectionItem(BaseModel):
-    """Either a folder (is_folder=True, has child items) or a request."""
+    """Either a folder (is_folder=True, has child items) or a request/spec.
+
+    ``kind`` discriminates between a regular HTTP request (``"request"``,
+    default for backwards compat) and a Playwright spec entry
+    (``"playwright_spec"``).  Older files that have no ``kind`` field
+    deserialize as ``"request"`` because of the default.
+    """
+
     id: str
     name: str
     is_folder: bool = False
-    # Request-specific fields (populated when is_folder=False).
+    # Discriminated kind — "request" is the legacy default.
+    kind: CollectionItemKind = "request"
+    # Request-specific fields (populated when is_folder=False and kind="request").
     method: HttpMethod | None = None
     url: str | None = None
     headers: dict[str, str] = Field(default_factory=dict)
@@ -75,6 +89,8 @@ class CollectionItem(BaseModel):
     examples: list[RequestExample] = Field(default_factory=list)
     captures: list[RequestCapture] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
+    # Silk / playwright_spec fields (populated when kind="playwright_spec").
+    spec_path: str | None = None
     # Folder-specific field (populated when is_folder=True).
     items: list[CollectionItem] = Field(default_factory=list)
 
