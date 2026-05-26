@@ -61,11 +61,11 @@ git -C /Users/tm/workspaces/projects/theridion log --oneline | head
 cd /Users/tm/workspaces/projects/theridion/apps/sidecar && uv run pytest -q
 
 # 3. Frontend typecheck + Playwright E2E
-cd /Users/tm/workspaces/projects/theridion/apps/desktop && pnpm typecheck
-cd /Users/tm/workspaces/projects/theridion/apps/desktop && pnpm test:e2e
+cd /Users/tm/workspaces/projects/theridion/apps/studio && pnpm typecheck
+cd /Users/tm/workspaces/projects/theridion/apps/studio && pnpm test:e2e
 
 # 4. Rust unit testy pro sidecar handshake
-cd /Users/tm/workspaces/projects/theridion/apps/desktop/src-tauri && cargo test --lib
+cd /Users/tm/workspaces/projects/theridion/apps/studio/src-tauri && cargo test --lib
 ```
 
 Když je všechno zelené, koukni do **"Co je hotovo"** dole + **"Roadmapa"**
@@ -75,7 +75,7 @@ Pokud něco selže, oprav nejdřív to — než přidáš novou funkci.
 **První lokální spuštění aplikace** (jednou per checkout):
 
 ```bash
-cd /Users/tm/workspaces/projects/theridion/apps/desktop
+cd /Users/tm/workspaces/projects/theridion/apps/studio
 pnpm install
 pnpm sidecar:bundle    # PyInstaller build sidecaru → ~1 min, ~26 MB binárka
 pnpm tauri dev         # ~2 min první cargo compile, pak otevře okno
@@ -127,7 +127,7 @@ Co-Authored-By trailer". Atomic — jeden concern jeden commit.
 ```
 
 **Sidecar je v dev módu spawnován Tauri shellem** z bundlovaného
-PyInstaller binárka v `apps/desktop/src-tauri/binaries/`. Stdout
+PyInstaller binárka v `apps/studio/src-tauri/binaries/`. Stdout
 ready-line `THERIDION_SIDECAR_READY pid=N port=N home=PATH` Rust
 parsuje a port vystaví frontendu přes `get_sidecar_port` Tauri command.
 Cold start ~6–8 s (PyInstaller --onefile).
@@ -206,23 +206,23 @@ theridion/
 cd apps/sidecar && uv run pytest -q
 
 # Frontend typecheck + build
-cd apps/desktop && pnpm typecheck && pnpm build
+cd apps/studio && pnpm typecheck && pnpm build
 
 # E2E (7 testů, ~9 s, izolovaný sidecar+vite na 8766/1421)
-cd apps/desktop && pnpm test:e2e
-cd apps/desktop && pnpm test:e2e:ui   # interaktivní debugger
+cd apps/studio && pnpm test:e2e
+cd apps/studio && pnpm test:e2e:ui   # interaktivní debugger
 
 # Build sidecar bundle (po Python změnách, nutné před tauri dev)
-cd apps/desktop && pnpm sidecar:bundle
+cd apps/studio && pnpm sidecar:bundle
 
 # Spustit aplikaci v dev módu
-cd apps/desktop && pnpm tauri dev
+cd apps/studio && pnpm tauri dev
 
 # Standalone sidecar pro fast Python iter (pak frontend přes pnpm dev v browser tabu)
 cd apps/sidecar && THERIDION_PORT=8765 uv run python -m theridion_sidecar.main
 
 # Rust unit tests
-cd apps/desktop/src-tauri && cargo test --lib
+cd apps/studio/src-tauri && cargo test --lib
 ```
 
 ## Konvence
@@ -388,7 +388,7 @@ cf401e1 Sidecar polish: diagnostics endpoint + PID tracking
   pkill -f "tauri.js dev" 2>/dev/null
   pkill -f "target/debug/theridion" 2>/dev/null
   pkill -f "pnpm tauri dev" 2>/dev/null
-  cd /Users/tm/workspaces/projects/theridion/apps/desktop
+  cd /Users/tm/workspaces/projects/theridion/apps/studio
   pnpm sidecar:bundle  # pokud binaries/ chybí
   pnpm tauri dev
   # → sleduj v logu řádek "[sidecar stdout] THERIDION_SIDECAR_READY pid=… port=…"
@@ -485,7 +485,7 @@ To, co umíme jednoznačně líp:
 ## Nedělej
 
 - ❌ Nemodifikuj `pyproject.toml` ručně, použij `uv add` / `uv add --dev`.
-- ❌ Necommituj `apps/desktop/src-tauri/binaries/*` (.gitignore to chytá,
+- ❌ Necommituj `apps/studio/src-tauri/binaries/*` (.gitignore to chytá,
    ale verifikuj).
 - ❌ Nepoužívej `git add -A` — vždy explicitně cesty.
 - ❌ Neměň `tsconfig.json` strict pravidla bez diskuze.

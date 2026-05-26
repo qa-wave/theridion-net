@@ -30,7 +30,7 @@ Theridion is a local-first, open-source, modular QA platform. File-based, git-fr
 ```bash
 # 1. Clone and install
 git clone https://github.com/qa-wave/theridion.git
-cd theridion/apps/desktop      # NOTE: will be renamed apps/studio (see wiki/02-ARCHITECTURE.md PR-1)
+cd theridion/apps/studio
 pnpm install
 
 # 2. Build the Python sidecar
@@ -100,10 +100,10 @@ Named after *Theridion*, a genus of spiders that build chaotic three-dimensional
 cd apps/sidecar && uv run pytest -q
 
 # Run E2E tests (~9s)
-cd apps/desktop && pnpm test:e2e
+cd apps/studio && pnpm test:e2e
 
 # TypeScript type check
-cd apps/desktop && pnpm typecheck
+cd apps/studio && pnpm typecheck
 
 # Standalone sidecar for fast Python iteration
 cd apps/sidecar && THERIDION_PORT=8765 uv run python -m theridion_sidecar.main
