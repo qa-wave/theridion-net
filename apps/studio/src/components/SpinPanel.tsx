@@ -36,6 +36,7 @@ import {
   Zap,
 } from "lucide-react";
 import { sidecar } from "../lib/sidecar";
+import { EmptyState } from "./EmptyState";
 import type {
   SpinRunResult,
   SpinScenarioInfo,
@@ -440,12 +441,11 @@ export function SpinPanel() {
         {/* Scenario list */}
         <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
           {scenarios.length === 0 ? (
-            <div className="px-3 py-4 text-center">
-              <p className="text-[11px] text-neutral-500">No .spin.yaml files found</p>
-              <p className="text-[10px] text-neutral-600 mt-1">
-                Click + to create one
-              </p>
-            </div>
+            <EmptyState
+              icon={FileCode2}
+              title="No .spin.yaml files found"
+              description="Click + to create one"
+            />
           ) : (
             scenarios.map((s) => (
               <ScenarioListItem

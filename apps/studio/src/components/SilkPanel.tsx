@@ -34,6 +34,7 @@ import {
   Video,
   XCircle,
 } from "lucide-react";
+import { EmptyState } from "./EmptyState";
 import { sidecar } from "../lib/sidecar";
 import type {
   SilkA11yViolation,
@@ -775,9 +776,11 @@ export function SilkPanel({ onToast }: SilkPanelProps) {
             <div className="flex-1 overflow-y-auto py-1">
               {/* Session runs (in-memory, unsaved) */}
               {sessionRuns.length === 0 && historyRuns.length === 0 && (
-                <div className="px-3 py-6 text-center text-xs text-neutral-600">
-                  No runs yet
-                </div>
+                <EmptyState
+                  icon={History}
+                  title="No runs yet"
+                  description="Run a spec to see results here"
+                />
               )}
 
               {sessionRuns.map((entry) => {

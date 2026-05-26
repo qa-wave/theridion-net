@@ -27,7 +27,11 @@ const modes: { id: AppMode; icon: typeof Zap; label: string }[] = [
 
 export function ActivityBar({ mode, onModeChange, networkEntryCount = 0 }: Props) {
   return (
-    <div className="flex h-full w-12 flex-col items-center border-r border-white/[0.06] bg-neutral-950 py-2 gap-1">
+    <nav
+      role="navigation"
+      aria-label="Module switcher"
+      className="flex h-full w-12 flex-col items-center border-r border-white/[0.06] bg-neutral-950 py-2 gap-1"
+    >
       {modes.map((m) => {
         const active = mode === m.id;
         const Icon = m.icon;
@@ -36,6 +40,8 @@ export function ActivityBar({ mode, onModeChange, networkEntryCount = 0 }: Props
           <Tooltip key={m.id} content={m.label} side="right">
             <button
               onClick={() => onModeChange(m.id)}
+              aria-label={m.label}
+              aria-current={active ? "page" : undefined}
               className={`group relative flex h-10 w-10 items-center justify-center transition-colors ${
                 active
                   ? "bg-white/[0.06]"
@@ -66,6 +72,6 @@ export function ActivityBar({ mode, onModeChange, networkEntryCount = 0 }: Props
           </Tooltip>
         );
       })}
-    </div>
+    </nav>
   );
 }
