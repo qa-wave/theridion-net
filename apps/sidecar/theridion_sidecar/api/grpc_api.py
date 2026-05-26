@@ -1,12 +1,21 @@
-"""gRPC reflection + unary invocation endpoints.
+"""gRPC endpoints: proto loading, reflection, unary invocation, TLS.
 
-Uses grpcio and grpc_reflection to list services and call unary methods.
-Requires grpcio and grpcio-reflection in dependencies.
+Implements:
+  POST /api/grpc/load-proto  — parse .proto file content, return services/methods
+  POST /api/grpc/reflect     — server reflection against a live gRPC server
+  POST /api/grpc/describe    — describe a single method's input/output fields
+  POST /api/grpc/invoke      — execute a unary RPC call
+
+TLS support: pass tls=true and optionally ca_cert / client_cert / client_key
+(PEM strings) in reflect, describe, and invoke requests to use a secure channel.
 """
 
 from __future__ import annotations
 
-import json
+import base64
+import tempfile
+import time
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -17,15 +26,43 @@ router = APIRouter(prefix="/api/grpc", tags=["grpc"])
 
 # ---- Models ----------------------------------------------------------------
 
+class TlsConfig(BaseModel):
+    """Optional TLS configuration for channel creation."""
+    enabled: bool = False
+    # PEM-encoded root CA certificate (for server verification). If omitted,
+    # the default system CAs are used when enabled=True.
+    ca_cert: str | None = None
+    # mTLS: PEM-encoded client certificate + private key.
+    client_cert: str | None = None
+    client_key: str | None = None
+
+
+class GrpcLoadProtoRequest(BaseModel):
+    """Load services/methods from a .proto file text without a live server."""
+    proto_content: str = Field(..., min_length=1)
+    # Optional extra .proto files that the main proto imports.
+    # Keys are logical filenames, values are .proto text.
+    imports: dict[str, str] = Field(default_factory=dict)
+
+
 class GrpcReflectRequest(BaseModel):
     host: str = Field(..., min_length=1)
+    tls: TlsConfig = Field(default_factory=TlsConfig)
+    metadata: dict[str, str] = Field(default_factory=dict)
 
 
 class GrpcMethodInfo(BaseModel):
     name: str
     input_type: str = ""
     output_type: str = ""
-    is_streaming: bool = False
+    client_streaming: bool = False
+    server_streaming: bool = False
+
+    @property
+    def is_streaming(self) -> bool:
+        return self.client_streaming or self.server_streaming
+
+    model_config = {"populate_by_name": True}
 
 
 class GrpcService(BaseModel):
@@ -41,6 +78,8 @@ class GrpcDescribeRequest(BaseModel):
     host: str = Field(..., min_length=1)
     service: str = Field(..., min_length=1)
     method: str = Field(..., min_length=1)
+    tls: TlsConfig = Field(default_factory=TlsConfig)
+    metadata: dict[str, str] = Field(default_factory=dict)
 
 
 class GrpcFieldDescriptor(BaseModel):
@@ -68,6 +107,7 @@ class GrpcInvokeRequest(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
     metadata: dict[str, str] = Field(default_factory=dict)
     timeout_seconds: float = Field(default=30.0, gt=0, le=300)
+    tls: TlsConfig = Field(default_factory=TlsConfig)
 
 
 class GrpcInvokeResponse(BaseModel):
@@ -75,6 +115,8 @@ class GrpcInvokeResponse(BaseModel):
     result: Any = None
     error: str | None = None
     elapsed_ms: float = 0
+    status_code: str | None = None
+    trailers: dict[str, str] = Field(default_factory=dict)
 
 
 # ---- Helpers ---------------------------------------------------------------
@@ -126,6 +168,26 @@ _PROTO_DEFAULTS: dict[str, Any] = {
     "bytes": "",
     "enum": 0,
 }
+
+
+def _create_channel(host: str, tls: TlsConfig) -> Any:
+    """Create a grpc.Channel — secure or insecure based on tls config."""
+    import grpc
+
+    if not tls.enabled:
+        return grpc.insecure_channel(host)
+
+    # Build SSL channel credentials
+    root_certificates: bytes | None = tls.ca_cert.encode() if tls.ca_cert else None
+    private_key: bytes | None = tls.client_key.encode() if tls.client_key else None
+    certificate_chain: bytes | None = tls.client_cert.encode() if tls.client_cert else None
+
+    creds = grpc.ssl_channel_credentials(
+        root_certificates=root_certificates,
+        private_key=private_key,
+        certificate_chain=certificate_chain,
+    )
+    return grpc.secure_channel(host, creds)
 
 
 def _parse_field_descriptors(
@@ -205,7 +267,82 @@ def _build_template(fields: list[GrpcFieldDescriptor]) -> dict[str, Any]:
     return template
 
 
+def _extract_services_from_fd(fd_proto: Any) -> list[GrpcService]:
+    """Extract GrpcService list from a FileDescriptorProto."""
+    services = []
+    pkg = fd_proto.package
+    for svc_desc in fd_proto.service:
+        full_svc_name = f"{pkg}.{svc_desc.name}" if pkg else svc_desc.name
+        methods = []
+        for m in svc_desc.method:
+            methods.append(GrpcMethodInfo(
+                name=m.name,
+                input_type=m.input_type.lstrip("."),
+                output_type=m.output_type.lstrip("."),
+                client_streaming=m.client_streaming,
+                server_streaming=m.server_streaming,
+            ))
+        services.append(GrpcService(name=full_svc_name, methods=methods))
+    return services
+
+
 # ---- Endpoints -------------------------------------------------------------
+
+@router.post("/load-proto", response_model=GrpcReflectResponse)
+async def load_proto(req: GrpcLoadProtoRequest) -> GrpcReflectResponse:
+    """Parse a .proto file and return the list of services and their methods.
+
+    Does not require a live gRPC server — useful for offline development
+    or when the target server doesn't support reflection.
+    """
+    try:
+        from google.protobuf import descriptor_pb2
+        from grpc_tools import protoc  # type: ignore[import-untyped]
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=501,
+            detail="grpcio-tools not installed",
+        ) from exc
+
+    import os
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Write main .proto file
+        main_proto = Path(tmpdir) / "main.proto"
+        main_proto.write_text(req.proto_content)
+
+        # Write any import dependencies
+        for filename, content in req.imports.items():
+            # Sanitize filename — only allow relative paths within tmpdir
+            safe_name = Path(filename).name
+            (Path(tmpdir) / safe_name).write_text(content)
+
+        # Compile to FileDescriptorSet
+        descriptor_file = Path(tmpdir) / "descriptor.pb"
+        result = protoc.main([
+            "grpc_tools.protoc",
+            f"--proto_path={tmpdir}",
+            f"--descriptor_set_out={descriptor_file}",
+            "--include_imports",
+            str(main_proto),
+        ])
+
+        if result != 0:
+            raise HTTPException(
+                status_code=422,
+                detail="Failed to parse .proto file — check syntax",
+            )
+
+        # Load FileDescriptorSet
+        fds = descriptor_pb2.FileDescriptorSet()
+        fds.ParseFromString(descriptor_file.read_bytes())
+
+        all_services: list[GrpcService] = []
+        for fd in fds.file:
+            all_services.extend(_extract_services_from_fd(fd))
+
+        return GrpcReflectResponse(services=all_services)
+
 
 @router.post("/reflect", response_model=GrpcReflectResponse)
 async def reflect(req: GrpcReflectRequest) -> GrpcReflectResponse:
@@ -219,14 +356,17 @@ async def reflect(req: GrpcReflectRequest) -> GrpcReflectResponse:
         ) from exc
 
     try:
-        channel = grpc.insecure_channel(req.host)
+        channel = _create_channel(req.host, req.tls)
         stub = reflection_pb2_grpc.ServerReflectionStub(channel)
+
+        # Build metadata list
+        call_metadata = list(req.metadata.items()) if req.metadata else []
 
         # List services
         request = reflection_pb2.ServerReflectionRequest(
             list_services=""
         )
-        responses = stub.ServerReflectionInfo(iter([request]))
+        responses = stub.ServerReflectionInfo(iter([request]), metadata=call_metadata)
         services: list[GrpcService] = []
         for resp in responses:
             for svc in resp.list_services_response.service:
@@ -236,7 +376,9 @@ async def reflect(req: GrpcReflectRequest) -> GrpcReflectResponse:
                 method_req = reflection_pb2.ServerReflectionRequest(
                     file_containing_symbol=svc.name
                 )
-                method_responses = stub.ServerReflectionInfo(iter([method_req]))
+                method_responses = stub.ServerReflectionInfo(
+                    iter([method_req]), metadata=call_metadata
+                )
                 methods: list[GrpcMethodInfo] = []
                 for mr in method_responses:
                     if mr.HasField("file_descriptor_response"):
@@ -252,7 +394,8 @@ async def reflect(req: GrpcReflectRequest) -> GrpcReflectResponse:
                                             name=m.name,
                                             input_type=m.input_type.lstrip("."),
                                             output_type=m.output_type.lstrip("."),
-                                            is_streaming=m.client_streaming or m.server_streaming,
+                                            client_streaming=m.client_streaming,
+                                            server_streaming=m.server_streaming,
                                         )
                                         for m in service_desc.method
                                     ]
@@ -280,14 +423,16 @@ async def describe(req: GrpcDescribeRequest) -> GrpcDescribeResponse:
         ) from exc
 
     try:
-        channel = grpc.insecure_channel(req.host)
+        channel = _create_channel(req.host, req.tls)
         stub = reflection_pb2_grpc.ServerReflectionStub(channel)
+
+        call_metadata = list(req.metadata.items()) if req.metadata else []
 
         # Resolve the file descriptor for the service
         file_req = reflection_pb2.ServerReflectionRequest(
             file_containing_symbol=req.service
         )
-        responses = stub.ServerReflectionInfo(iter([file_req]))
+        responses = stub.ServerReflectionInfo(iter([file_req]), metadata=call_metadata)
 
         input_type = ""
         output_type = ""
@@ -348,15 +493,15 @@ async def invoke(req: GrpcInvokeRequest) -> GrpcInvokeResponse:
             detail="grpcio / grpcio-reflection not installed",
         ) from exc
 
-    import time
-
     started = time.perf_counter()
     try:
-        channel = grpc.insecure_channel(req.host)
+        channel = _create_channel(req.host, req.tls)
         stub = reflection_pb2_grpc.ServerReflectionStub(channel)
 
+        # Build metadata list
+        call_metadata = list(req.metadata.items()) if req.metadata else None
+
         # Resolve the file descriptor for the service
-        symbol = f"{req.service}.{req.method}" if "." not in req.method else req.method
         file_req = reflection_pb2.ServerReflectionRequest(
             file_containing_symbol=req.service
         )
@@ -377,33 +522,62 @@ async def invoke(req: GrpcInvokeRequest) -> GrpcInvokeResponse:
         svc_desc = pool.FindServiceByName(req.service)
         method_desc = svc_desc.FindMethodByName(req.method)
 
-        # Build request message
-        factory = message_factory.MessageFactory(pool)
-        request_class = factory.GetPrototype(method_desc.input_type)
+        # Build request message.
+        # protobuf >= 4.x: GetMessageClass replaces the deprecated GetPrototype.
+        # Fall back to the old API for compatibility with older environments.
+        def _get_msg_class(descriptor: Any) -> Any:
+            if hasattr(message_factory, "GetMessageClass"):
+                return message_factory.GetMessageClass(descriptor)
+            # Legacy path (protobuf < 4)
+            factory = message_factory.MessageFactory(pool=pool)
+            return factory.GetPrototype(descriptor)  # type: ignore[attr-defined]
+
+        request_class = _get_msg_class(method_desc.input_type)
+        response_class = _get_msg_class(method_desc.output_type)
+
         request_msg = request_class()
         if req.payload:
             json_format.ParseDict(req.payload, request_msg)
 
-        # Build metadata
-        metadata = list(req.metadata.items()) if req.metadata else None
-
-        # Make the call
+        # Make the unary call; capture trailing metadata
         full_method = f"/{req.service}/{req.method}"
-        response_bytes = channel.unary_unary(
+        call_future = channel.unary_unary(
             full_method,
             request_serializer=lambda x: x.SerializeToString(),
-            response_deserializer=factory.GetPrototype(method_desc.output_type).FromString,
-        )(request_msg, timeout=req.timeout_seconds, metadata=metadata)
+            response_deserializer=response_class.FromString,
+        ).future(request_msg, timeout=req.timeout_seconds, metadata=call_metadata)
+
+        response_msg = call_future.result()
+
+        # Extract trailing metadata
+        trailers: dict[str, str] = {}
+        for k, v in (call_future.trailing_metadata() or []):
+            trailers[k] = v
 
         elapsed = (time.perf_counter() - started) * 1000
-        result = json_format.MessageToDict(response_bytes)
+        result = json_format.MessageToDict(response_msg)
         channel.close()
 
-        return GrpcInvokeResponse(ok=True, result=result, elapsed_ms=round(elapsed, 2))
+        return GrpcInvokeResponse(
+            ok=True,
+            result=result,
+            elapsed_ms=round(elapsed, 2),
+            status_code="OK",
+            trailers=trailers,
+        )
     except Exception as exc:
         elapsed = (time.perf_counter() - started) * 1000
+        # Extract gRPC status code if available
+        status_code: str | None = None
+        try:
+            import grpc
+            if hasattr(exc, "code"):
+                status_code = str(exc.code())
+        except Exception:
+            pass
         return GrpcInvokeResponse(
             ok=False,
             error=str(exc),
             elapsed_ms=round(elapsed, 2),
+            status_code=status_code,
         )
