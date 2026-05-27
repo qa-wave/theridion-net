@@ -1,7 +1,7 @@
 [package]
-name = "theridion"
+name = "theridion-be"
 version = "0.0.1"
-description = "Theridion — modern API testing platform"
+description = "Theridion BE — backend & integration testing desktop app"
 authors = ["Tomáš Mertin <tomas.mertin@gmail.com>"]
 edition = "2021"
 rust-version = "1.77"
