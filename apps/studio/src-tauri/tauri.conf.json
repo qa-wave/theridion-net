@@ -38,8 +38,8 @@
     ],
     "externalBin": ["binaries/theridion-sidecar"],
     "category": "DeveloperTool",
-    "shortDescription": "Backend API testing — Theridion BE",
-    "longDescription": "Theridion BE — backend & integration testing desktop app. REST, GraphQL, gRPC, SOAP/WS-Security, Kafka, JMS, JDBC, MQTT — file-based collections and assertions, no cloud dependency.",
+    "shortDescription": "Backend testing — integration + load + security + network",
+    "longDescription": "Theridion BE — backend testing desktop app covering four categories: (1) Integration tests over REST, GraphQL, gRPC, SOAP/WS-Security, Kafka, JMS, JDBC, MQTT — Postman/SoapUI replacement. (2) Load tests via embedded Locust + K6/JMeter/Gatling launchers. (3) Security scans (OWASP ZAP / Burp Suite proxying + active scans). (4) Network analysis (packet capture via Wireshark/tcpdump bridge + Zenmap-style scanner). File-based collections, no cloud dependency.",
     "createUpdaterArtifacts": true
   },
   "plugins": {
