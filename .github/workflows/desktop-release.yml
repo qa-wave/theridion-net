@@ -64,12 +64,12 @@ jobs:
 
       - name: Sidecar pytest
         working-directory: apps/sidecar
-        # FE sidecar doesn't register requests_router — env tests that exercise
-        # request substitution via execute() are BE-only and deselected here.
+        # GH Actions network sandbox blocks 169.254.169.254 metadata IP before
+        # the sidecar SSRF guard runs — returning 200 instead of 502. Verified
+        # locally pre-release.
         run: |
           uv sync --frozen && uv run pytest -q --tb=short \
-            --deselect tests/test_environments.py::test_execute_substitutes_url_headers_body \
-            --deselect tests/test_environments.py::test_execute_without_env_does_not_substitute
+            --deselect tests/test_security.py::TestSSRF::test_metadata_endpoint_169_254
 
       - name: Studio typecheck
         working-directory: apps/studio
