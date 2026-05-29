@@ -27,7 +27,7 @@ permissions:
 
 concurrency:
   group: desktop-release-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   RUST_BACKTRACE: 1
