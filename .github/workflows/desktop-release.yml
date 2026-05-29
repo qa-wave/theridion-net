@@ -128,19 +128,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # ── Theridion BE (apps/studio + apps/sidecar) ───────────────────
-          - app: studio
-            sidecar_path: apps/sidecar
-            studio_path: apps/studio
-            os: macos-latest
-            target: aarch64-apple-darwin
-            platform: macos-arm64
-          - app: studio
-            sidecar_path: apps/sidecar
-            studio_path: apps/studio
-            os: macos-13
-            target: x86_64-apple-darwin
-            platform: macos-x64
+          # ── Theridion BE — V1: Linux + Windows only ─────────────────────
+          # macOS is omitted in CI for V1 because GitHub Actions Free tier
+          # macOS runner queue averages 5+ hours and code signing requires
+          # paid Apple Developer ID anyway. Mac users build locally via
+          # `pnpm sidecar:bundle && pnpm tauri:build`. Plan: add macOS once
+          # signing certs are provisioned (see docs/signing.md).
           - app: studio
             sidecar_path: apps/sidecar
             studio_path: apps/studio
