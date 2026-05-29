@@ -24,7 +24,7 @@ import random
 import re
 import tempfile
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -32,18 +32,21 @@ from pydantic import BaseModel, Field
 
 from .storage import home_dir
 
-
 # Allow {{ name }} or {{name}}; identifiers match what users typically pick.
 # Also matches $-prefixed built-in functions like {{$uuid}}.
 _VAR_PATTERN = re.compile(r"\{\{\s*(\$?[A-Za-z_][A-Za-z0-9_-]*)\s*\}\}")
+
+# Separate pattern for {{secret:NAME}} references — resolved from the vault,
+# never from the plaintext env JSON.
+_SECRET_PATTERN = re.compile(r"\{\{\s*secret:([A-Za-z_][A-Za-z0-9_-]*)\s*\}\}")
 
 
 def _builtin(name: str) -> str | None:
     """Evaluate a built-in $-function. Returns None if unknown."""
     if name == "$timestamp":
-        return str(int(datetime.now(tz=timezone.utc).timestamp() * 1000))
+        return str(int(datetime.now(tz=UTC).timestamp() * 1000))
     if name == "$isoDate":
-        return datetime.now(tz=timezone.utc).isoformat()
+        return datetime.now(tz=UTC).isoformat()
     if name == "$uuid":
         return str(uuid.uuid4())
     if name == "$randomInt":
@@ -143,16 +146,33 @@ def substitute(
     extra: dict[str, str] | None = None,
     collection_vars: dict[str, str] | None = None,
 ) -> str:
-    """Replace every ``{{var}}`` in ``text`` with the matching enabled
-    variable's value or built-in function result.
+    """Replace every ``{{var}}`` and ``{{secret:NAME}}`` in ``text``.
 
-    Resolution order (later wins):
+    ``{{secret:NAME}}`` references are resolved from the encrypted vault
+    and are **never** sourced from the plaintext env JSON.  If a secret is
+    not found in the vault the token is left as-is (same behaviour as an
+    unknown plain var).
+
+    Resolution order for plain vars (later wins):
     globals -> collection_vars -> env -> extra (runtime) -> built-in.
 
     Unknown vars are left as-is.
     """
     from . import globals as global_store
+    from . import secrets_vault
 
+    # First pass: resolve {{secret:NAME}} tokens from the vault.
+    def _sub_secret(m: re.Match[str]) -> str:
+        name = m.group(1)
+        value = secrets_vault.resolve(name)
+        if value is not None:
+            return value
+        # Secret not found — leave token in place (no leak).
+        return m.group(0)
+
+    text = _SECRET_PATTERN.sub(_sub_secret, text)
+
+    # Second pass: resolve plain {{var}} tokens.
     lookup: dict[str, str] = global_store.as_dict()
     if collection_vars:
         lookup.update(collection_vars)
