@@ -1355,6 +1355,9 @@ export default function App() {
         url={active.url}
         headers={parseHeadersText(active.headersRaw)}
         body={active.body || null}
+        environmentId={activeEnvId}
+        collectionId={active.savedAs?.collectionId ?? null}
+        auth={active.auth}
       />
       <SettingsModal open={modals.isOpen("settings")} onClose={modals.close} />
       <ReleaseCenterModal

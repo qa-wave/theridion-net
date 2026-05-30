@@ -2,6 +2,10 @@
 
 Fires concurrent HTTP requests using asyncio + httpx, collects latency
 stats, and returns a summary with percentiles.
+
+Variable substitution (``{{var}}``) and authentication are resolved once
+before workers start — this keeps throughput unaffected by per-request
+Python overhead.
 """
 
 from __future__ import annotations
@@ -15,6 +19,10 @@ import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from .. import environments, storage
+from ..models import AuthConfig
+from ._auth import apply_auth
+
 router = APIRouter(prefix="/api/loadtest", tags=["loadtest"])
 
 
@@ -26,6 +34,14 @@ class LoadTestRequest(BaseModel):
     concurrency: int = Field(default=10, ge=1, le=500)
     duration_seconds: float = Field(default=10.0, gt=0, le=300)
     rps_limit: float | None = None
+    # --- variable resolution & auth (v1) ------------------------------------
+    environment_id: str | None = None
+    collection_id: str | None = None
+    auth: AuthConfig | None = None
+    query: dict[str, str] = Field(default_factory=dict)
+    # Per-request builtins ({{$random}} etc.) — disabled by default to keep
+    # throughput high; enable only when each request truly needs unique values.
+    per_request_vars: bool = False
 
 
 class LoadTestResult(BaseModel):
@@ -50,6 +66,7 @@ async def _worker(
     url: str,
     headers: dict[str, str],
     body: str | None,
+    query: dict[str, str],
     deadline: float,
     rps_delay: float | None,
     latencies: list[float],
@@ -63,6 +80,7 @@ async def _worker(
                 method=method,
                 url=url,
                 headers=headers,
+                params=query or None,
                 content=body.encode("utf-8") if body else None,
             )
             latencies.append((time.perf_counter() - start) * 1000)
@@ -75,6 +93,35 @@ async def _worker(
 
 @router.post("/run", response_model=LoadTestResult)
 async def run_loadtest(req: LoadTestRequest) -> LoadTestResult:
+    # ------------------------------------------------------------------
+    # Phase 1: resolve variables and inject auth ONCE before any worker
+    # starts so the substitution overhead does not affect throughput.
+    # ------------------------------------------------------------------
+    env = environments.get(req.environment_id) if req.environment_id else None
+    if req.environment_id and env is None:
+        raise HTTPException(status_code=404, detail="environment not found")
+
+    coll_vars: dict[str, str] | None = None
+    if req.collection_id:
+        coll = storage.get(req.collection_id)
+        if coll is not None:
+            coll_vars = {v.name: v.value for v in coll.variables if v.enabled}
+
+    resolved_url = environments.substitute(req.url, env, collection_vars=coll_vars)
+    resolved_headers = environments.substitute_dict(req.headers, env, collection_vars=coll_vars)
+    resolved_body = (
+        environments.substitute(req.body, env, collection_vars=coll_vars)
+        if req.body is not None
+        else None
+    )
+    resolved_query = environments.substitute_dict(req.query, env, collection_vars=coll_vars)
+
+    if req.auth and req.auth.type != "none":
+        apply_auth(req.auth, resolved_headers, resolved_query, env, collection_vars=coll_vars)
+
+    # ------------------------------------------------------------------
+    # Phase 2: spawn concurrent workers with already-resolved values.
+    # ------------------------------------------------------------------
     rps_delay: float | None = None
     if req.rps_limit and req.rps_limit > 0:
         # Spread the delay across workers
@@ -90,8 +137,9 @@ async def run_loadtest(req: LoadTestRequest) -> LoadTestResult:
         tasks = [
             asyncio.create_task(
                 _worker(
-                    client, req.method, req.url, req.headers,
-                    req.body, deadline, rps_delay, latencies, errors,
+                    client, req.method, resolved_url, resolved_headers,
+                    resolved_body, resolved_query, deadline, rps_delay,
+                    latencies, errors,
                 )
             )
             for _ in range(req.concurrency)

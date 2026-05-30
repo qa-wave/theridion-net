@@ -471,6 +471,10 @@ export interface LoadTestInput {
   concurrency?: number;
   duration_seconds?: number;
   rps_limit?: number | null;
+  environment_id?: string | null;
+  collection_id?: string | null;
+  auth?: import("./types").AuthConfig | null;
+  query?: Record<string, string>;
 }
 
 export interface LoadTestResult {
