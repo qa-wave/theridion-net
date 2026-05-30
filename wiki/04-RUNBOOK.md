@@ -1,10 +1,10 @@
-# Theridion BE — runbook
+# Theridion Net — runbook
 
 ## First-time setup
 
 ```bash
-git clone git@github.com:qa-wave/theridion-be.git
-cd theridion-be/apps/studio
+git clone git@github.com:qa-wave/theridion-net.git
+cd theridion-net/apps/studio
 pnpm install
 pnpm sidecar:bundle          # ~1 min, builds ~46 MB PyInstaller bundle
 pnpm tauri:dev               # opens window
@@ -79,16 +79,16 @@ Viz `docs/signing.md` — Apple / Windows cert acquisition + GitHub Secrets setu
 base64 string), NE base64-encoded value. Pokud máš key v `~/.tauri/X.update.key`:
 
 ```bash
-cat ~/.tauri/theridion-be.update.key | gh secret set TAURI_SIGNING_PRIVATE_KEY --repo qa-wave/theridion-be
+cat ~/.tauri/theridion-net.update.key | gh secret set TAURI_SIGNING_PRIVATE_KEY --repo qa-wave/theridion-net
 ```
 
 ## On-call
 
-- **Failed CI run** → `gh run view <id> --repo qa-wave/theridion-be --log-failed`
+- **Failed CI run** → `gh run view <id> --repo qa-wave/theridion-net --log-failed`
 - **Sidecar deadlock v prod** → User restart aplikace, kill PID z `~/.theridion/sidecar.pid`
 - **Updater stuck** → user smaž `~/.theridion/updater/` cache, restart app
 
 ## Příbuzné runbooks
 
-- [theridion-fe runbook](../../theridion-fe/wiki/04-RUNBOOK.md)
+- [theridion-eyes runbook](../../theridion-eyes/wiki/04-RUNBOOK.md)
 - [theridion-hub runbook](../../theridion-hub/wiki/04-RUNBOOK.md)

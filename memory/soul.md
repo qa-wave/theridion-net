@@ -1,4 +1,4 @@
-# Theridion BE — identita
+# Theridion Net — identita
 
 Backend testing desktop app. **Co děláme**: integrace, zátěž, security, network analýzu — všechno v jedné Tauri binárce, file-based, bez cloud lock-inu.
 

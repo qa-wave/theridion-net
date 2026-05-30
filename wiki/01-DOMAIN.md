@@ -1,4 +1,4 @@
-# Theridion BE — doména
+# Theridion Net — doména
 
 ## Co řešíme
 
@@ -14,7 +14,7 @@ nástroji, 5 různými formáty scénářů, 5 různými CI integracemi a žádn
 sdílet test data napříč kategoriemi (např. spustit security scan po integration testu
 proti stejnému endpointu).
 
-Theridion BE sjednocuje: jeden binární, jeden soubor `~/.theridion/`, jeden plugin
+Theridion Net sjednocuje: jeden binární, jeden soubor `~/.theridion/`, jeden plugin
 sandbox, jeden CI runner.
 
 ## Cílový uživatel

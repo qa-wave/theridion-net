@@ -1,4 +1,4 @@
-# Theridion BE
+# Theridion Net
 
 Backend testing desktop app covering 4 categories — integration, load, security and network analysis. Standalone Tauri binary for macOS / Linux / Windows, no cloud.
 
@@ -53,7 +53,7 @@ Mesh panel — packet capture + port scan.
 cd apps/studio
 pnpm install
 pnpm sidecar:bundle    # builds Python sidecar → src-tauri/binaries/theridion-sidecar
-pnpm tauri:dev         # opens the BE app window
+pnpm tauri:dev         # opens the Net app window
 ```
 
 Dev port: 1420 (FE app uses 1430).
@@ -81,4 +81,4 @@ Tag-triggered (v*.*.*) → 4 OS targets × 2 apps (BE + FE) = 8 artifacts.
 | Packet capture | tcpdump (Linux/macOS) / npcap (Windows) | OS-native |
 | Port scanner | nmap | `brew install nmap` / [nmap.org](https://nmap.org/) |
 
-Theridion BE auto-detects installed tools on launch (Settings → Tool integrations).
+Theridion Net auto-detects installed tools on launch (Settings → Tool integrations).

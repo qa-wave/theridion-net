@@ -2,21 +2,21 @@
 
 | Klíč | Hodnota |
 |---|---|
-| **Name** | `theridion-be` |
+| **Name** | `theridion-net` |
 | **Group** | `qa-tooling` |
-| **GitHub** | [qa-wave/theridion-be](https://github.com/qa-wave/theridion-be) |
+| **GitHub** | [qa-wave/theridion-net](https://github.com/qa-wave/theridion-net) |
 | **Type** | Desktop (Tauri 2.11) — distributed Win/macOS/Linux binárka |
 
 ## Session start
 
-1. `memory/soul.md` — identita BE
+1. `memory/soul.md` — identita Net
 2. `memory/memory.md` — index paměti
-3. `apps/studio/README.md` — co BE obsahuje za testy
+3. `apps/studio/README.md` — co Net obsahuje za testy
 4. `CHANGELOG.md`
 
 ---
 
-# Theridion BE — kontext
+# Theridion Net — kontext
 
 Backend testing desktop app — 4 testing kategorie v jedné Tauri binárce:
 
@@ -28,11 +28,11 @@ Backend testing desktop app — 4 testing kategorie v jedné Tauri binárce:
 ## Layout
 
 \`\`\`
-theridion-be/
+theridion-net/
 ├── apps/
 │   ├── studio/            Tauri shell + React/TS frontend
 │   │   ├── src/           UI (Sidebar, RequestPanel, OWASPScannerModal, LoadTestModal, …)
-│   │   ├── src-tauri/     Rust shell (com.theridion.be)
+│   │   ├── src-tauri/     Rust shell (com.theridion.net)
 │   │   └── tests/e2e/     Playwright E2E
 │   └── sidecar/           Python FastAPI sidecar (PyInstaller bundled)
 │       ├── theridion_sidecar/  package (api/, storage.py, …)
@@ -74,7 +74,7 @@ Tag push \`v*.*.*\` → \`.github/workflows/desktop-release.yml\`:
 
 ## Příbuzné projekty
 
-- **theridion-fe** — sourozenecký pro FE automation
+- **theridion-eyes** — sourozenecký pro Eyes (frontend) automation
 - **theridion-hub** — web dashboard, přijímá run ingest
 
 ---

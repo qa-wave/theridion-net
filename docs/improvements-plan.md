@@ -1,7 +1,7 @@
-# Theridion Studio BE — Implementační plán 10 zlepšení
+# Theridion Studio Net — Implementační plán 10 zlepšení
 
 > Stav: návrh (NECOMMITOVÁNO). Autor: senior produktový inženýr pro Tomáše (QA lead).
-> Repo: `/Users/tm/workspaces/projects/theridion-be`. FE `apps/studio`, sidecar `apps/sidecar/theridion_sidecar`.
+> Repo: `/Users/tm/workspaces/projects/theridion/theridion-net`. FE `apps/studio`, sidecar `apps/sidecar/theridion_sidecar`.
 > Ověřeno proti kódu 2026-05-30: App.tsx 1587 ř./31 useState, RequestPanel 2251 ř., ResponsePanel 1768 ř.
 
 ---

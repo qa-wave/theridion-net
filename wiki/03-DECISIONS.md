@@ -1,4 +1,4 @@
-# Theridion BE — ADR index
+# Theridion Net — ADR index
 
 ## ADR-001 — Single Tauri binárka + Python sidecar
 **Stav:** Accepted
@@ -39,7 +39,7 @@
 ## ADR-005 — Slim sidecar split z monorepo
 **Stav:** Accepted (2026-05-29)
 **Kontext:** Původní monorepo `theridion` mělo apps/studio + apps/studio-fe + apps/hub. Po splitu BE samostatně nepotřebuje FE-only deps.
-**Rozhodnutí:** Theridion BE má vlastní repo `qa-wave/theridion-be` s apps/studio + apps/sidecar. FE+Hub separátní repos.
+**Rozhodnutí:** Theridion Net má vlastní repo `qa-wave/theridion-net` s apps/studio + apps/sidecar. FE+Hub separátní repos.
 **Důsledky:**
 - ✅ Per-produkt release tagy
 - ✅ Per-produkt CI matrix bez cross-dependencies

@@ -1,4 +1,4 @@
-# Theridion BE — architektura
+# Theridion Net — architektura
 
 ```
 ┌────────────────────────────────────────────────────────────────┐

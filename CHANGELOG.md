@@ -4,11 +4,11 @@
 
 ### Added — desktop product split
 
-- **Theridion BE** (`apps/studio`) — rebranded from "Theridion Studio".
-  Identifier `com.theridion.be`. Full backend & integration testing surface:
+- **Theridion Net** (`apps/studio`) — rebranded from "Theridion Studio".
+  Identifier `com.theridion.net`. Full backend & integration testing surface:
   REST, GraphQL, gRPC, SOAP/WS-Security, Kafka, JMS, JDBC, MQTT.
-- **Theridion FE** (`apps/studio-fe`, NEW) — separate Tauri desktop product
-  for Playwright frontend automation. Identifier `com.theridion.fe`.
+- **Theridion Eyes** (`apps/studio-fe`, NEW) — separate Tauri desktop product
+  for Playwright frontend automation. Identifier `com.theridion.eyes`.
   Distinct dev port (1430), distinct pid+token files so both apps can run
   side-by-side. ActivityBar reduced to 3 modes (silk / monitors / hubOverview)
   with violet accent.
@@ -20,7 +20,7 @@
   tag-triggered (v*.*.*) gate → draft release → 4 OS × 2 apps = 8 build
   jobs. Bundle formats per OS: macOS dmg+app, Linux deb+AppImage,
   Windows msi+nsis. Code signing + notarization hooks ready (secrets-gated).
-- **Tauri auto-updater** — both products read `latest-be.json` / `latest-fe.json`
+- **Tauri auto-updater** — both products read `latest-net.json` / `latest-fe.json`
   from GitHub Releases.
 
 ### Added — Hub web platform
