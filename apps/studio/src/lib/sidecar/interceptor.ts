@@ -81,6 +81,28 @@ export interface SendToRequestOutput {
 }
 
 // ---------------------------------------------------------------------------
+// Publish config types
+// ---------------------------------------------------------------------------
+
+/** Payload for PUT /api/run-result/config */
+export interface PublishConfig {
+  weave_url: string;
+  weave_token: string;
+  hub_url: string;
+  hub_token: string;
+  enabled: boolean;
+}
+
+/** Response from GET/PUT /api/run-result/config — tokens masked */
+export interface PublishConfigMasked {
+  weave_url: string;
+  weave_token_set: boolean;
+  hub_url: string;
+  hub_token_set: boolean;
+  enabled: boolean;
+}
+
+// ---------------------------------------------------------------------------
 // RunResult v2 types
 // ---------------------------------------------------------------------------
 
@@ -233,5 +255,16 @@ export const interceptorMethods = {
     call<SecurityRunResultV2Output>("/api/run-result/security", {
       method: "POST",
       body: JSON.stringify(inp),
+    }),
+
+  /** Get the current publish config (tokens masked). */
+  getPublishConfig: () =>
+    call<PublishConfigMasked>("/api/run-result/config", { method: "GET" }),
+
+  /** Save publish config. Pass the full config including tokens. */
+  putPublishConfig: (cfg: PublishConfig) =>
+    call<PublishConfigMasked>("/api/run-result/config", {
+      method: "PUT",
+      body: JSON.stringify(cfg),
     }),
 };

@@ -191,6 +191,7 @@ from theridion_sidecar.api.silk import router as silk_router
 from theridion_sidecar.api.spin import router as spin_router
 from theridion_sidecar.api.secrets_vault import router as secrets_vault_router
 from theridion_sidecar.api.interceptor import router as interceptor_router
+from theridion_sidecar.api.publish_config import router as publish_config_router
 from theridion_sidecar.api.run_result_v2 import router as run_result_v2_router
 from theridion_sidecar.api.fuzzer import router as fuzzer_router
 from theridion_sidecar.api.load_engine import router as load_engine_router
@@ -500,6 +501,7 @@ def create_app() -> FastAPI:
     app.include_router(spin_router)
     app.include_router(secrets_vault_router)
     app.include_router(interceptor_router)
+    app.include_router(publish_config_router)
     app.include_router(run_result_v2_router)
     app.include_router(fuzzer_router)
     app.include_router(load_engine_router)

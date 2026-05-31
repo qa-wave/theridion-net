@@ -5,10 +5,27 @@ Schema: /theridion-weave/docs/contracts/run-result-v2.schema.json
   product: "net"
   suite_type: "load" | "security"
   requests: list of per-step summaries
+
+Publish targets are loaded from the persisted PublishConfig (see publish_config.py).
+Per-call hub_url / hub_token fields still work as an override / legacy path; if both
+the config and per-call fields are absent the run is not published.
+
+Publish priority (per target):
+  1. explicit per-call field (hub_url/hub_token on the input model)
+  2. persisted PublishConfig
+  3. environment variable THERIDION_HUB_URL / THERIDION_HUB_TOKEN  (Hub only)
+  4. skip
+
+Weave target: POST to <weave_url>/api/runs/ingest
+Hub target:   POST to <hub_url>/api/ingest
+
+Both use Idempotency-Key: <run_id>.
+Tokens are never logged.
 """
 
 from __future__ import annotations
 
+import os
 import uuid
 from datetime import UTC, datetime
 from typing import Literal
@@ -238,8 +255,32 @@ def _security_to_run_result(inp: SecurityRunResultV2Input, started_at: str) -> R
 
 
 # ---------------------------------------------------------------------------
-# Hub publish helper
+# Publish helpers
 # ---------------------------------------------------------------------------
+
+
+async def _post_run_result(
+    run_result: RunResultV2,
+    ingest_url: str,
+    token: str,
+) -> tuple[bool, str | None]:
+    """POST a RunResult v2 payload to an arbitrary ingest URL."""
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(
+                ingest_url,
+                json=run_result.model_dump(mode="json"),
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json",
+                    "Idempotency-Key": run_result.run_id,
+                },
+            )
+            if resp.status_code in (200, 201, 202, 204):
+                return True, None
+            return False, f"{ingest_url} returned {resp.status_code}: {resp.text[:200]}"
+    except httpx.RequestError as exc:
+        return False, str(exc)
 
 
 async def _publish_to_hub(
@@ -247,24 +288,91 @@ async def _publish_to_hub(
     hub_url: str,
     hub_token: str,
 ) -> tuple[bool, str | None]:
-    """POST the RunResult v2 payload to Hub /api/runs/ingest."""
-    ingest_url = f"{hub_url.rstrip('/')}/api/runs/ingest"
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.post(
-                ingest_url,
-                json=run_result.model_dump(mode="json"),
-                headers={
-                    "Authorization": f"Bearer {hub_token}",
-                    "Content-Type": "application/json",
-                    "Idempotency-Key": run_result.run_id,
-                },
-            )
-            if resp.status_code in (200, 201):
-                return True, None
-            return False, f"Hub returned {resp.status_code}: {resp.text[:200]}"
-    except httpx.RequestError as exc:
-        return False, str(exc)
+    """POST the RunResult v2 payload to Hub /api/ingest."""
+    ingest_url = f"{hub_url.rstrip('/')}/api/ingest"
+    return await _post_run_result(run_result, ingest_url, hub_token)
+
+
+async def _publish_to_weave(
+    run_result: RunResultV2,
+    weave_url: str,
+    weave_token: str,
+) -> tuple[bool, str | None]:
+    """POST the RunResult v2 payload to Weave /api/runs/ingest."""
+    ingest_url = f"{weave_url.rstrip('/')}/api/runs/ingest"
+    return await _post_run_result(run_result, ingest_url, weave_token)
+
+
+def _resolve_hub_params(
+    call_hub_url: str | None,
+    call_hub_token: str | None,
+) -> tuple[str | None, str | None]:
+    """Resolve hub URL and token: per-call > config > env."""
+    from theridion_sidecar.api.publish_config import load_config
+
+    hub_url = call_hub_url
+    hub_token = call_hub_token
+
+    if not hub_url or not hub_token:
+        cfg = load_config()
+        hub_url = hub_url or (cfg.hub_url if cfg.enabled else None)
+        hub_token = hub_token or (cfg.hub_token if cfg.enabled else None)
+
+    if not hub_url:
+        hub_url = os.environ.get("THERIDION_HUB_URL")
+    if not hub_token:
+        hub_token = os.environ.get("THERIDION_HUB_TOKEN")
+
+    return hub_url or None, hub_token or None
+
+
+def _resolve_weave_params() -> tuple[str | None, str | None]:
+    """Resolve weave URL and token from config."""
+    from theridion_sidecar.api.publish_config import load_config
+
+    cfg = load_config()
+    if not cfg.enabled:
+        return None, None
+    return (cfg.weave_url or None), (cfg.weave_token or None)
+
+
+async def _dual_publish(
+    run_result: RunResultV2,
+    call_hub_url: str | None,
+    call_hub_token: str | None,
+) -> tuple[bool, str | None]:
+    """Publish to Weave and Hub (both configured targets). Best-effort: errors
+    are returned as a combined string rather than raising.
+
+    Returns (published, error_string | None).
+    published=True means at least one target accepted the payload.
+    """
+    errors: list[str] = []
+    any_ok = False
+
+    # Weave
+    weave_url, weave_token = _resolve_weave_params()
+    if weave_url and weave_token:
+        ok, err = await _publish_to_weave(run_result, weave_url, weave_token)
+        if ok:
+            any_ok = True
+        elif err:
+            errors.append(f"weave: {err}")
+
+    # Hub
+    hub_url, hub_token = _resolve_hub_params(call_hub_url, call_hub_token)
+    if hub_url and hub_token:
+        ok, err = await _publish_to_hub(run_result, hub_url, hub_token)
+        if ok:
+            any_ok = True
+        elif err:
+            errors.append(f"hub: {err}")
+
+    if not any_ok and not errors:
+        # No targets configured — not an error
+        return False, None
+
+    return any_ok, "; ".join(errors) if errors else None
 
 
 # ---------------------------------------------------------------------------
@@ -274,14 +382,11 @@ async def _publish_to_hub(
 
 @router.post("/load", response_model=LoadRunResultV2Output)
 async def wrap_load_result(inp: LoadRunResultV2Input) -> LoadRunResultV2Output:
-    """Convert a LoadRunResult to RunResult v2 and optionally publish to Hub."""
+    """Convert a LoadRunResult to RunResult v2 and publish to configured targets."""
     started_at = inp.started_at or _now_iso()
     run_result = _load_to_run_result(inp, started_at)
 
-    published = False
-    publish_error: str | None = None
-    if inp.hub_url and inp.hub_token:
-        published, publish_error = await _publish_to_hub(run_result, inp.hub_url, inp.hub_token)
+    published, publish_error = await _dual_publish(run_result, inp.hub_url, inp.hub_token)
 
     return LoadRunResultV2Output(
         run_result=run_result,
@@ -292,14 +397,11 @@ async def wrap_load_result(inp: LoadRunResultV2Input) -> LoadRunResultV2Output:
 
 @router.post("/security", response_model=SecurityRunResultV2Output)
 async def wrap_security_result(inp: SecurityRunResultV2Input) -> SecurityRunResultV2Output:
-    """Convert a SecurityScanOutput to RunResult v2 and optionally publish to Hub."""
+    """Convert a SecurityScanOutput to RunResult v2 and publish to configured targets."""
     started_at = inp.started_at or _now_iso()
     run_result = _security_to_run_result(inp, started_at)
 
-    published = False
-    publish_error: str | None = None
-    if inp.hub_url and inp.hub_token:
-        published, publish_error = await _publish_to_hub(run_result, inp.hub_url, inp.hub_token)
+    published, publish_error = await _dual_publish(run_result, inp.hub_url, inp.hub_token)
 
     return SecurityRunResultV2Output(
         run_result=run_result,

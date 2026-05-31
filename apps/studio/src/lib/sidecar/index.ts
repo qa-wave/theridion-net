@@ -199,6 +199,7 @@ export type {
   RunResultSuiteType, RunResultRequestStatus, RunResultRequest, RunResultV2,
   LoadRunResultV2Input, LoadRunResultV2Output,
   SecurityRunResultV2Input, SecurityRunResultV2Output,
+  PublishConfig, PublishConfigMasked,
 } from "./interceptor";
 
 export type {

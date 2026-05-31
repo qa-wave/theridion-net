@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, Globe, Info, Keyboard, Loader2, Monitor, Plus, Radio, Server, Settings2, Sparkles, Trash2, X } from "lucide-react";
+import { Check, Globe, Info, Keyboard, Loader2, Monitor, Plus, Radio, Server, Settings2, Share2, Sparkles, Trash2, X } from "lucide-react";
 import { sidecar } from "../lib/sidecar";
+import type { PublishConfig } from "../lib/sidecar";
 import { pingHub } from "../lib/sidecar/hub";
 import { THEMES, applyTheme, loadTheme, type ThemeId } from "../state/theme";
 import { useFocusTrap } from "../hooks/useFocusTrap";
 
-type Tab = "general" | "ai" | "editor" | "proxy" | "hub" | "shortcuts" | "about";
+type Tab = "general" | "ai" | "editor" | "proxy" | "hub" | "publish" | "shortcuts" | "about";
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "general", label: "General", icon: <Settings2 className="h-3.5 w-3.5" /> },
@@ -13,6 +14,7 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "editor", label: "Editor", icon: <Monitor className="h-3.5 w-3.5" /> },
   { id: "proxy", label: "Proxy", icon: <Radio className="h-3.5 w-3.5" /> },
   { id: "hub", label: "Hub", icon: <Server className="h-3.5 w-3.5" /> },
+  { id: "publish", label: "Publikování", icon: <Share2 className="h-3.5 w-3.5" /> },
   { id: "shortcuts", label: "Shortcuts", icon: <Keyboard className="h-3.5 w-3.5" /> },
   { id: "about", label: "About", icon: <Info className="h-3.5 w-3.5" /> },
 ];
@@ -43,6 +45,15 @@ export function SettingsModal({ open, onClose }: Props) {
   const [hubPingResult, setHubPingResult] = useState<{ ok: boolean; version?: string; error?: string } | null>(null);
   const [hubPinging, setHubPinging] = useState(false);
 
+  // Publish config
+  const [publishWeaveUrl, setPublishWeaveUrl] = useState("");
+  const [publishWeaveToken, setPublishWeaveToken] = useState("");
+  const [publishWeaveTokenSet, setPublishWeaveTokenSet] = useState(false);
+  const [publishHubUrl, setPublishHubUrl] = useState("");
+  const [publishHubToken, setPublishHubToken] = useState("");
+  const [publishHubTokenSet, setPublishHubTokenSet] = useState(false);
+  const [publishEnabled, setPublishEnabled] = useState(true);
+
   // Editor
   const [fontSize, setFontSize] = useState(12);
   const [wordWrap, setWordWrap] = useState(true);
@@ -68,6 +79,16 @@ export function SettingsModal({ open, onClose }: Props) {
         setHubToken(parsed.token ?? "");
       }
     } catch { /* ignore */ }
+    // Load publish config from sidecar
+    sidecar.getPublishConfig().then((cfg) => {
+      setPublishWeaveUrl(cfg.weave_url);
+      setPublishWeaveToken("");          // never prefill — token is write-only
+      setPublishWeaveTokenSet(cfg.weave_token_set);
+      setPublishHubUrl(cfg.hub_url);
+      setPublishHubToken("");
+      setPublishHubTokenSet(cfg.hub_token_set);
+      setPublishEnabled(cfg.enabled);
+    }).catch(() => {});
   }, [open]);
 
   async function save() {
@@ -75,8 +96,25 @@ export function SettingsModal({ open, onClose }: Props) {
     try {
       await sidecar.updateAiSettings({ provider, ollama_base_url: ollamaUrl, ollama_model: ollamaModel });
       applyTheme(theme);
-      // Persist Hub config
+      // Persist Hub config (legacy localStorage)
       window.localStorage.setItem("theridion.hubConfig", JSON.stringify({ url: hubUrl.trim(), token: hubToken.trim() }));
+      // Persist publish config via sidecar
+      const publishPayload: PublishConfig = {
+        weave_url: publishWeaveUrl.trim(),
+        // If token field is empty, keep the existing token (user didn't change it);
+        // send the placeholder value so the sidecar can detect "no change".
+        // We use a special sentinel: empty string = clear token,
+        // non-empty = set new token.
+        weave_token: publishWeaveToken,
+        hub_url: publishHubUrl.trim(),
+        hub_token: publishHubToken,
+        enabled: publishEnabled,
+      };
+      const saved2 = await sidecar.putPublishConfig(publishPayload);
+      setPublishWeaveToken("");
+      setPublishHubToken("");
+      setPublishWeaveTokenSet(saved2.weave_token_set);
+      setPublishHubTokenSet(saved2.hub_token_set);
       setSaved(true);
       setTimeout(() => setSaved(false), 1500);
     } catch { /* ignore */ }
@@ -368,6 +406,102 @@ export function SettingsModal({ open, onClose }: Props) {
                 </Section>
                 <div className="rounded-md border border-glass bg-neutral-900/20 px-3 py-2 text-[11px] text-neutral-500">
                   The Hub token is stored locally in your browser. It is never sent to any server other than the Hub URL above.
+                </div>
+              </div>
+            )}
+
+            {/* ---- Publikování výsledků ---- */}
+            {tab === "publish" && (
+              <div className="space-y-4">
+                <Section title="Theridion Weave">
+                  <p className="mb-3 text-[11px] text-neutral-500">
+                    Zkopírujte Ingest URL a token z nastavení Weave a vložte sem.
+                    Net bude po každém běhu automaticky odesílat výsledky do Weave.
+                  </p>
+                  <div className="space-y-3">
+                    <div>
+                      <label className={labelClass}>Weave Ingest URL</label>
+                      <input
+                        data-testid="publish-weave-url"
+                        value={publishWeaveUrl}
+                        onChange={(e) => setPublishWeaveUrl(e.target.value)}
+                        placeholder="https://weave.yourteam.com"
+                        className={inputClass}
+                        spellCheck={false}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>
+                        Weave Token
+                        {publishWeaveTokenSet && publishWeaveToken === "" && (
+                          <span className="ml-2 text-emerald-400">(nastaven)</span>
+                        )}
+                      </label>
+                      <input
+                        data-testid="publish-weave-token"
+                        type="password"
+                        value={publishWeaveToken}
+                        onChange={(e) => setPublishWeaveToken(e.target.value)}
+                        placeholder={publishWeaveTokenSet ? "••••••••  (ponechte prázdné = beze změny)" : "••••••••••••••••"}
+                        className={inputClass}
+                        autoComplete="new-password"
+                      />
+                    </div>
+                  </div>
+                </Section>
+
+                <Section title="Theridion Hub (volitelné)">
+                  <p className="mb-3 text-[11px] text-neutral-500">
+                    Pokud používáte Hub, výsledky budou odeslány do obou systémů.
+                  </p>
+                  <div className="space-y-3">
+                    <div>
+                      <label className={labelClass}>Hub Ingest URL</label>
+                      <input
+                        data-testid="publish-hub-url"
+                        value={publishHubUrl}
+                        onChange={(e) => setPublishHubUrl(e.target.value)}
+                        placeholder="https://hub.yourteam.com"
+                        className={inputClass}
+                        spellCheck={false}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>
+                        Hub Token
+                        {publishHubTokenSet && publishHubToken === "" && (
+                          <span className="ml-2 text-emerald-400">(nastaven)</span>
+                        )}
+                      </label>
+                      <input
+                        data-testid="publish-hub-token"
+                        type="password"
+                        value={publishHubToken}
+                        onChange={(e) => setPublishHubToken(e.target.value)}
+                        placeholder={publishHubTokenSet ? "••••••••  (ponechte prázdné = beze změny)" : "••••••••••••••••"}
+                        className={inputClass}
+                        autoComplete="new-password"
+                      />
+                    </div>
+                  </div>
+                </Section>
+
+                <Section title="Stav publikování">
+                  <label className="flex items-center gap-2 text-xs text-neutral-300">
+                    <input
+                      data-testid="publish-enabled"
+                      type="checkbox"
+                      checked={publishEnabled}
+                      onChange={(e) => setPublishEnabled(e.target.checked)}
+                      className={checkClass}
+                    />
+                    Publikovat výsledky automaticky
+                  </label>
+                </Section>
+
+                <div className="rounded-md border border-glass bg-neutral-900/20 px-3 py-2 text-[11px] text-neutral-500">
+                  Tokeny jsou uloženy lokálně v <span className="font-mono text-cobweb-400">~/.theridion/publish_config.json</span>.
+                  Nikdy nejsou odeslány nikam jinam než na výše uvedené URL.
                 </div>
               </div>
             )}
