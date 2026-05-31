@@ -498,7 +498,7 @@ function StatusRow({ res, onDiff, onCodegen, history, onViewHistorical, onAddAss
   );
 }
 
-const SIZE_WARNING_THRESHOLD = 1024 * 1024;       // 1 MB
+export const LARGE_RESPONSE_BYTES = 1_000_000; // 1 MB
 const SIZE_FORCE_RAW_THRESHOLD = 5 * 1024 * 1024;  // 5 MB
 
 function decodeBase64(s: string): string {
@@ -530,9 +530,132 @@ function minifyJson(s: string): string {
 
 type BodyTransform = "none" | "format" | "minify" | "base64" | "jwt" | "urlencoded";
 
+function downloadBody(body: string, contentType: string) {
+  const ext = contentType.includes("json") ? ".json" : contentType.includes("xml") ? ".xml" : ".txt";
+  const blob = new Blob([body], { type: contentType || "text/plain" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `response${ext}`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+type LargeBodyState = "guard" | "loading" | "ready";
+
 function BodyView({ res, onAddAssertion }: { res: ExecuteResponse; onAddAssertion?: (assertion: Assertion) => void }) {
   const ct = res.headers["content-type"] ?? "";
-  const pretty = useMemo(() => prettify(res.body, ct), [res.body, ct]);
+  const isGuarded = res.body_size_bytes >= LARGE_RESPONSE_BYTES;
+
+  // For small payloads pretty-print synchronously (existing behavior).
+  // For large payloads we defer until user explicitly requests it.
+  const [largeState, setLargeState] = useState<LargeBodyState>(() => isGuarded ? "guard" : "ready");
+  const [workerResult, setWorkerResult] = useState<string | null>(null);
+
+  // Reset guard when response changes
+  useEffect(() => {
+    setLargeState(isGuarded ? "guard" : "ready");
+    setWorkerResult(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [res.body_size_bytes, res.final_url]);
+
+  function handleShowAnyway() {
+    setLargeState("loading");
+
+    // Run pretty-print in a Web Worker to avoid blocking the main thread.
+    // Inline worker via Blob URL — no separate worker file needed.
+    const workerCode = `
+      self.onmessage = function(e) {
+        const { body, ct } = e.data;
+        let result = body;
+        try {
+          if (ct.includes('json') || body.trimStart().startsWith('{') || body.trimStart().startsWith('[')) {
+            result = JSON.stringify(JSON.parse(body), null, 2);
+          }
+        } catch {
+          // not JSON — return as-is
+        }
+        self.postMessage(result);
+      };
+    `;
+    const blob = new Blob([workerCode], { type: "application/javascript" });
+    const workerUrl = URL.createObjectURL(blob);
+    const worker = new Worker(workerUrl);
+
+    worker.onmessage = (e: MessageEvent<string>) => {
+      setWorkerResult(e.data);
+      setLargeState("ready");
+      worker.terminate();
+      URL.revokeObjectURL(workerUrl);
+    };
+    worker.onerror = () => {
+      // Fallback: truncated raw view
+      setWorkerResult(res.body.slice(0, 200_000));
+      setLargeState("ready");
+      worker.terminate();
+      URL.revokeObjectURL(workerUrl);
+    };
+    worker.postMessage({ body: res.body, ct });
+  }
+
+  if (largeState === "guard" || largeState === "loading") {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-4 p-8">
+        <div className="flex flex-col items-center gap-3 rounded-xl border border-amber-800/30 bg-amber-950/20 px-8 py-6 text-center">
+          <AlertTriangle className="h-8 w-8 text-amber-400" />
+          <div>
+            <p className="text-sm font-medium text-neutral-200">Large response payload</p>
+            <p className="mt-1 text-xs text-neutral-500">
+              {formatBytes(res.body_size_bytes)}
+              {ct && <span className="ml-2 font-mono text-neutral-600">{ct.split(";")[0]}</span>}
+            </p>
+          </div>
+          <p className="max-w-xs text-[11px] leading-relaxed text-neutral-500">
+            Rendering large payloads may freeze the UI. You can display it anyway (parsed in a background thread) or download the raw file.
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleShowAnyway}
+              disabled={largeState === "loading"}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600/20 px-3 py-1.5 text-xs font-medium text-amber-300 transition hover:bg-amber-600/30 disabled:opacity-60"
+            >
+              {largeState === "loading" ? (
+                <><RefreshCw className="h-3 w-3 animate-spin" /> Parsing...</>
+              ) : (
+                <><Database className="h-3 w-3" /> Show anyway</>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => downloadBody(res.body, ct)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-glass px-3 py-1.5 text-xs font-medium text-neutral-400 transition hover:bg-white/[0.06] hover:text-neutral-200"
+            >
+              <Download className="h-3 w-3" /> Download
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // "ready" — either small payload (workerResult === null, use normal path) or
+  // large payload user unlocked (workerResult holds worker output or truncated slice).
+  const prettyFromWorker = workerResult;
+
+  return <BodyViewContent res={res} ct={ct} prettyOverride={prettyFromWorker} onAddAssertion={onAddAssertion} />;
+}
+
+function BodyViewContent({ res, ct, prettyOverride, onAddAssertion }: {
+  res: ExecuteResponse;
+  ct: string;
+  prettyOverride: string | null;
+  onAddAssertion?: (assertion: Assertion) => void;
+}) {
+  const pretty = useMemo(
+    () => prettyOverride ?? prettify(res.body, ct),
+    [prettyOverride, res.body, ct],
+  );
   const [copyDropdownOpen, setCopyDropdownOpen] = useState(false);
   const [forceRaw, setForceRaw] = useState(false);
   const [viewMode, setViewMode] = useState<BodyViewMode>("editor");
@@ -552,7 +675,7 @@ function BodyView({ res, onAddAssertion }: { res: ExecuteResponse; onAddAssertio
     return pretty; // "none" shows pretty by default
   }, [transform, res.body, pretty]);
 
-  const isLarge = res.body_size_bytes >= SIZE_WARNING_THRESHOLD;
+  const isLarge = res.body_size_bytes >= LARGE_RESPONSE_BYTES;
   const isForcedRaw = res.body_size_bytes >= SIZE_FORCE_RAW_THRESHOLD || forceRaw;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const editorRef = useRef<any>(null);
@@ -690,18 +813,21 @@ function BodyView({ res, onAddAssertion }: { res: ExecuteResponse; onAddAssertio
         onCurrentMatchChange={setCurrentMatchIdx}
         isXml={isXml}
       />
-      {/* Large response warning */}
+      {/* Warning banner shown when user bypassed the guard (large payload is now rendered) */}
       {isLarge && (
         <div className="flex items-center gap-2 border-b border-amber-800/30 bg-amber-950/20 px-3 py-1.5 text-[11px] text-amber-400">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-          Large response ({formatBytes(res.body_size_bytes)}) {isForcedRaw && !forceRaw ? "- forced raw mode" : "- rendering may be slow"}
+          Large response ({formatBytes(res.body_size_bytes)}) {isForcedRaw ? "— raw mode" : "— may be slow"}
           {!isForcedRaw && (
             <button type="button" onClick={() => setForceRaw(true)} className="ml-2 rounded border border-amber-700/40 px-1.5 py-0.5 text-[10px] hover:bg-amber-900/30">
               Show raw
             </button>
           )}
           <button type="button" onClick={copyAsRaw} className="ml-1 rounded border border-amber-700/40 px-1.5 py-0.5 text-[10px] hover:bg-amber-900/30">
-            Copy to clipboard
+            Copy
+          </button>
+          <button type="button" onClick={() => downloadBody(res.body, ct)} className="ml-1 rounded border border-amber-700/40 px-1.5 py-0.5 text-[10px] hover:bg-amber-900/30">
+            Download
           </button>
         </div>
       )}

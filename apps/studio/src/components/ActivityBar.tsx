@@ -1,13 +1,15 @@
-import { Activity, GitBranch, MonitorPlay, Plus, Radio, Server, Workflow, Zap } from "lucide-react";
+import { Activity, GitBranch, MonitorPlay, Plus, Radio, Server, Shield, Workflow, Zap } from "lucide-react";
 import { useState } from "react";
 import { Tooltip } from "./Tooltip";
 
-export type AppMode = "requests" | "flows" | "traffic" | "monitors" | "silk" | "spin" | "hubOverview";
+export type AppMode = "requests" | "flows" | "traffic" | "load" | "security" | "monitors" | "silk" | "spin" | "hubOverview";
 
 // Per-mode accent colors. Default (undefined) falls back to emerald-500 via CSS var.
 const MODE_ACCENT: Partial<Record<AppMode, string>> = {
   silk: undefined, // uses default emerald
   spin: "#a3e635", // lime-400 — Spin brand
+  load: "#f97316", // orange-500 — Load testing brand
+  security: "#ef4444", // red-500 — Security brand
 };
 
 interface Props {
@@ -21,6 +23,8 @@ const primaryModes: { id: AppMode; icon: typeof Zap; label: string }[] = [
   { id: "requests", icon: Zap, label: "Requests" },
   { id: "flows", icon: GitBranch, label: "Flows" },
   { id: "traffic", icon: Radio, label: "Traffic" },
+  { id: "load", icon: Activity, label: "Load Test" },
+  { id: "security", icon: Shield, label: "Security Scan" },
 ];
 
 /** Secondary modules — hidden behind the "+" overflow button */

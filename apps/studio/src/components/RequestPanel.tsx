@@ -8,6 +8,7 @@ import { ScriptsPanel } from "./ScriptsPanel";
 import type { Method } from "../state/types";
 import { headersToText, parseHeadersText } from "../state/types";
 import { OAuth2FlowModal } from "./OAuth2FlowModal";
+import { parseBulkText, serializePairsToText } from "../lib/bulkEditParser";
 
 type Tab = "params" | "headers" | "body" | "auth" | "certs" | "tests" | "scripts" | "notes" | "retry";
 
@@ -287,6 +288,10 @@ export function RequestPanel({
 
 function ParamsView({ url, onUrlChange }: { url: string; onUrlChange: (u: string) => void }) {
   const parsed = parseQueryParams(url);
+  const [bulkMode, setBulkMode] = useState(false);
+  const [bulkText, setBulkText] = useState("");
+  const [bulkConfirmPending, setBulkConfirmPending] = useState(false);
+
   function setParam(idx: number, field: "key" | "value", val: string) {
     const next = parsed.params.slice();
     next[idx] = { ...next[idx], [field]: val };
@@ -300,68 +305,108 @@ function ParamsView({ url, onUrlChange }: { url: string; onUrlChange: (u: string
     next.splice(idx, 1);
     onUrlChange(buildUrl(parsed.base, next));
   }
+
+  function openBulk() {
+    const lines = parsed.params.filter((p) => p.key).map((p) => `${p.key}=${p.value}`).join("\n");
+    setBulkText(lines);
+    setBulkConfirmPending(false);
+    setBulkMode(true);
+  }
+
+  function applyBulk() {
+    const pairs = parseBulkText(bulkText);
+    const next = pairs.map((p) => ({ key: p.key, value: p.value }));
+    onUrlChange(buildUrl(parsed.base, next));
+    setBulkMode(false);
+    setBulkConfirmPending(false);
+  }
+
   return (
     <div>
-      <p className="mb-2 text-[11px] uppercase tracking-wider text-neutral-500">Query parameters</p>
-      <div className="overflow-hidden rounded border border-glass">
-        <table className="w-full text-xs">
-          <thead className="bg-neutral-900/60 text-neutral-500">
-            <tr>
-              <th className="w-1/3 px-3 py-1.5 text-left font-medium">Name</th>
-              <th className="px-3 py-1.5 text-left font-medium">Value</th>
-              <th className="w-8" />
-            </tr>
-          </thead>
-          <tbody>
-            {parsed.params.length === 0 && (
-              <tr>
-                <td colSpan={3} className="px-3 py-3 text-center text-neutral-600">
-                  No query parameters
-                </td>
-              </tr>
-            )}
-            {parsed.params.map((p, idx) => (
-              <tr key={idx} className="border-t border-glass">
-                <td>
-                  <input
-                    value={p.key}
-                    onChange={(e) => setParam(idx, "key", e.target.value)}
-                    placeholder="name"
-                    className="w-full bg-transparent px-3 py-1.5 font-mono text-xs focus:outline-none"
-                    spellCheck={false}
-                  />
-                </td>
-                <td>
-                  <input
-                    value={p.value}
-                    onChange={(e) => setParam(idx, "value", e.target.value)}
-                    placeholder="value"
-                    className="w-full bg-transparent px-3 py-1.5 font-mono text-xs focus:outline-none"
-                    spellCheck={false}
-                  />
-                </td>
-                <td className="text-center">
-                  <button
-                    type="button"
-                    onClick={() => delParam(idx)}
-                    className="rounded p-1 text-neutral-600 transition hover:bg-neutral-800 hover:text-rose-400"
-                    title="Remove"
-                  >
-                    ×
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="mb-2 flex items-center justify-between">
+        <p className="text-[11px] uppercase tracking-wider text-neutral-500">Query parameters</p>
+        <button
+          type="button"
+          onClick={bulkMode ? () => setBulkMode(false) : openBulk}
+          className={`text-[11px] transition ${bulkMode ? "text-cobweb-400" : "text-neutral-500 hover:text-neutral-300"}`}
+        >
+          {bulkMode ? "Table view" : "Bulk edit"}
+        </button>
       </div>
-      <button
-        type="button"
-        onClick={addParam}
-        className="mt-2 text-xs text-cobweb-400 hover:text-cobweb-300"
-      >
-        + Add parameter
-      </button>
+
+      {bulkMode ? (
+        <BulkEditPane
+          label="parameters"
+          placeholder={"page=1\nlimit=20\n# sort=asc  (commented out)"}
+          text={bulkText}
+          onTextChange={(t) => { setBulkText(t); setBulkConfirmPending(true); }}
+          confirmPending={bulkConfirmPending}
+          onApply={applyBulk}
+          onCancel={() => setBulkMode(false)}
+        />
+      ) : (
+        <>
+          <div className="overflow-hidden rounded border border-glass">
+            <table className="w-full text-xs">
+              <thead className="bg-neutral-900/60 text-neutral-500">
+                <tr>
+                  <th className="w-1/3 px-3 py-1.5 text-left font-medium">Name</th>
+                  <th className="px-3 py-1.5 text-left font-medium">Value</th>
+                  <th className="w-8" />
+                </tr>
+              </thead>
+              <tbody>
+                {parsed.params.length === 0 && (
+                  <tr>
+                    <td colSpan={3} className="px-3 py-3 text-center text-neutral-600">
+                      No query parameters
+                    </td>
+                  </tr>
+                )}
+                {parsed.params.map((p, idx) => (
+                  <tr key={idx} className="border-t border-glass">
+                    <td>
+                      <input
+                        value={p.key}
+                        onChange={(e) => setParam(idx, "key", e.target.value)}
+                        placeholder="name"
+                        className="w-full bg-transparent px-3 py-1.5 font-mono text-xs focus:outline-none"
+                        spellCheck={false}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        value={p.value}
+                        onChange={(e) => setParam(idx, "value", e.target.value)}
+                        placeholder="value"
+                        className="w-full bg-transparent px-3 py-1.5 font-mono text-xs focus:outline-none"
+                        spellCheck={false}
+                      />
+                    </td>
+                    <td className="text-center">
+                      <button
+                        type="button"
+                        onClick={() => delParam(idx)}
+                        className="rounded p-1 text-neutral-600 transition hover:bg-neutral-800 hover:text-rose-400"
+                        title="Remove"
+                      >
+                        ×
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <button
+            type="button"
+            onClick={addParam}
+            className="mt-2 text-xs text-cobweb-400 hover:text-cobweb-300"
+          >
+            + Add parameter
+          </button>
+        </>
+      )}
     </div>
   );
 }
@@ -390,19 +435,41 @@ function serializeHeaderRows(rows: HeaderRow[]): string {
     .join("\n");
 }
 
-function HeadersView({ value, onChange }: { value: string; onChange: (s: string) => void }) {
-  const [mode, setMode] = useState<"table" | "raw">("table");
-  const [rows, setRows] = useState<HeaderRow[]>(() => parseHeaderRows(value));
+type HeadersViewMode = "table" | "raw" | "bulk";
 
-  // Sync rows from raw value when switching to table mode
+function HeadersView({ value, onChange }: { value: string; onChange: (s: string) => void }) {
+  const [mode, setMode] = useState<HeadersViewMode>("table");
+  const [rows, setRows] = useState<HeaderRow[]>(() => parseHeaderRows(value));
+  const [bulkText, setBulkText] = useState("");
+  const [bulkConfirmPending, setBulkConfirmPending] = useState(false);
+
   function switchToTable() {
     setRows(parseHeaderRows(value));
     setMode("table");
+    setBulkConfirmPending(false);
   }
 
   function switchToRaw() {
     onChange(serializeHeaderRows(rows));
     setMode("raw");
+    setBulkConfirmPending(false);
+  }
+
+  function openBulk() {
+    // Pre-fill textarea with current pairs as "Key: Value" lines
+    const currentRows = parseHeaderRows(value);
+    setBulkText(serializePairsToText(currentRows.map((r) => ({ key: r.key, value: r.value, enabled: r.enabled }))));
+    setBulkConfirmPending(false);
+    setMode("bulk");
+  }
+
+  function applyBulk() {
+    const parsed = parseBulkText(bulkText);
+    const next: HeaderRow[] = parsed.map((p) => ({ key: p.key, value: p.value, enabled: p.enabled }));
+    setRows(next);
+    onChange(serializeHeaderRows(next));
+    setMode("table");
+    setBulkConfirmPending(false);
   }
 
   function updateRow(idx: number, patch: Partial<HeaderRow>) {
@@ -461,18 +528,41 @@ function HeadersView({ value, onChange }: { value: string; onChange: (s: string)
             >
               Raw
             </button>
+            <button
+              type="button"
+              onClick={openBulk}
+              className={`px-2 py-0.5 transition ${
+                mode === "bulk"
+                  ? "bg-cobweb-600/20 text-cobweb-400"
+                  : "text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800/40"
+              }`}
+            >
+              Bulk edit
+            </button>
           </div>
-          <QuickHeaderDropdown onAdd={(header) => {
-            if (mode === "table") {
-              addQuickHeader(header);
-            } else {
-              onChange(value ? value + "\n" + header : header);
-            }
-          }} />
+          {mode !== "bulk" && (
+            <QuickHeaderDropdown onAdd={(header) => {
+              if (mode === "table") {
+                addQuickHeader(header);
+              } else {
+                onChange(value ? value + "\n" + header : header);
+              }
+            }} />
+          )}
         </div>
       </div>
 
-      {mode === "raw" ? (
+      {mode === "bulk" ? (
+        <BulkEditPane
+          label="headers"
+          placeholder={"Accept: application/json\nAuthorization: Bearer {{token}}\n# X-Debug: 1  (commented out)"}
+          text={bulkText}
+          onTextChange={(t) => { setBulkText(t); setBulkConfirmPending(true); }}
+          confirmPending={bulkConfirmPending}
+          onApply={applyBulk}
+          onCancel={switchToTable}
+        />
+      ) : mode === "raw" ? (
         <>
           <textarea
             value={value}
@@ -560,6 +650,58 @@ function HeadersView({ value, onChange }: { value: string; onChange: (s: string)
           </button>
         </>
       )}
+    </div>
+  );
+}
+
+interface BulkEditPaneProps {
+  label: string;
+  placeholder: string;
+  text: string;
+  onTextChange: (t: string) => void;
+  confirmPending: boolean;
+  onApply: () => void;
+  onCancel: () => void;
+}
+
+function BulkEditPane({ label, placeholder, text, onTextChange, confirmPending, onApply, onCancel }: BulkEditPaneProps) {
+  const preview = useMemo(() => parseBulkText(text), [text]);
+  return (
+    <div className="space-y-2">
+      <p className="text-[11px] leading-relaxed text-neutral-500">
+        Paste <span className="font-mono">Key: Value</span> or <span className="font-mono">key=value</span> lines. Empty lines and <span className="font-mono">#</span>-prefixed comments are ignored. Applying will replace all current {label}.
+      </p>
+      <textarea
+        autoFocus
+        value={text}
+        onChange={(e) => onTextChange(e.target.value)}
+        placeholder={placeholder}
+        rows={10}
+        className="w-full resize-y rounded border border-glass bg-neutral-900/50 px-3 py-2 font-mono text-xs text-neutral-100 placeholder-neutral-600 focus:border-cobweb-500/40 focus:outline-none"
+        spellCheck={false}
+      />
+      {text.trim() && (
+        <p className="text-[10px] text-neutral-500">
+          {preview.length} pair{preview.length !== 1 ? "s" : ""} parsed
+        </p>
+      )}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onApply}
+          disabled={!confirmPending && !text.trim()}
+          className="rounded-md bg-cobweb-600/20 px-3 py-1 text-xs font-medium text-cobweb-400 transition hover:bg-cobweb-600/30 disabled:opacity-40"
+        >
+          Apply ({preview.length})
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-md border border-glass px-3 py-1 text-xs text-neutral-500 transition hover:border-neutral-600 hover:text-neutral-300"
+        >
+          Cancel
+        </button>
+      </div>
     </div>
   );
 }

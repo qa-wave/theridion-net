@@ -76,6 +76,8 @@ import { ReleaseCenterModal } from "./components/ReleaseCenterModal";
 import { SpinPanel } from "./components/SpinPanel";
 import { SilkPanel } from "./components/SilkPanel";
 import { HubOverviewPanel } from "./components/HubOverviewPanel";
+import { LoadWorkspacePanel } from "./components/LoadWorkspacePanel";
+import { SecurityWorkspacePanel } from "./components/SecurityWorkspacePanel";
 
 const APP_VERSION = "0.0.1";
 const ACTIVE_ENV_KEY = "theridion.activeEnvironmentId";
@@ -1214,6 +1216,33 @@ export default function App() {
             <p className="text-lg font-medium text-neutral-400">Flow Editor</p>
             <p className="mt-1 text-sm">Coming soon</p>
           </div>
+        </div>
+      )}
+
+      {appMode === "load" && (
+        <div className="col-span-2 overflow-hidden">
+          <LoadWorkspacePanel
+            collections={collections}
+            onToast={addToast}
+          />
+        </div>
+      )}
+
+      {appMode === "security" && (
+        <div className="col-span-2 overflow-hidden">
+          <SecurityWorkspacePanel
+            collections={collections}
+            onToast={addToast}
+            onSendToRequest={(method, url, headers, body) => {
+              newTab({
+                method: method as import("./state/types").Method,
+                url,
+                headersRaw: Object.entries(headers).map(([k, v]) => `${k}: ${v}`).join("\n"),
+                body: body ?? "",
+              });
+              setAppMode("requests");
+            }}
+          />
         </div>
       )}
 

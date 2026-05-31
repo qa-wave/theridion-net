@@ -194,6 +194,14 @@ export type {
 } from "./product";
 
 export type {
+  ScanFlag, CapturedFlow, InterceptConfig, InterceptStatus,
+  ForwardRequest, ForwardResult, FlowListOutput, EditForwardInput, SendToRequestOutput,
+  RunResultSuiteType, RunResultRequestStatus, RunResultRequest, RunResultV2,
+  LoadRunResultV2Input, LoadRunResultV2Output,
+  SecurityRunResultV2Input, SecurityRunResultV2Output,
+} from "./interceptor";
+
+export type {
   SilkBrowserCheckOutput, SilkRunInput, SilkRunOutput,
   SilkInstallBrowsersResponse, SilkScreenshotDiffInput, SilkScreenshotDiffOutput,
   SilkAutoSpecInput, SilkAutoSpecOutput,
@@ -235,6 +243,7 @@ import { templateEngineMethods } from "./templateEngine";
 import { productMethods } from "./product";
 import { silkMethods } from "./silk";
 import { spinMethods } from "./spin";
+import { interceptorMethods } from "./interceptor";
 
 export const sidecar = {
   ...requestsMethods,
@@ -255,4 +264,5 @@ export const sidecar = {
   ...productMethods,
   ...silkMethods,
   ...spinMethods,
+  ...interceptorMethods,
 } as const;
