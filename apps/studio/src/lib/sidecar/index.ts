@@ -202,6 +202,27 @@ export type {
 } from "./interceptor";
 
 export type {
+  AttackMode, PayloadPosition, FuzzerConfig, FuzzerStartOutput,
+  FuzzerStatus, FuzzerRunStatus, FuzzResult, FlagInput,
+} from "./fuzzer";
+
+export type {
+  LoadStage, LoadEngineConfig, LoadEngineStartOutput, LoadEngineStatus,
+  LoadEngineTimelinePoint, LoadEngineResult, LoadEngineRunSummary,
+} from "./loadEngine";
+
+export type {
+  PortScanInput, PortResult, PortScanResult,
+  HarSessionStartInput, HarSessionOutput, HarCaptureInput, HarCaptureResult,
+  HarEntry, HarLog, HarExport,
+} from "./networkProbe";
+
+export type {
+  DataSourceType, DataSource, CollectionRunInput, CollectionRequestResult,
+  IterationResult, CollectionRunStatus, CollectionRunResult, CollectionRunSummary,
+} from "./collectionRunner";
+
+export type {
   SilkBrowserCheckOutput, SilkRunInput, SilkRunOutput,
   SilkInstallBrowsersResponse, SilkScreenshotDiffInput, SilkScreenshotDiffOutput,
   SilkAutoSpecInput, SilkAutoSpecOutput,
@@ -244,6 +265,10 @@ import { productMethods } from "./product";
 import { silkMethods } from "./silk";
 import { spinMethods } from "./spin";
 import { interceptorMethods } from "./interceptor";
+import { fuzzerMethods } from "./fuzzer";
+import { loadEngineMethods } from "./loadEngine";
+import { networkProbeMethods } from "./networkProbe";
+import { collectionRunnerMethods } from "./collectionRunner";
 
 export const sidecar = {
   ...requestsMethods,
@@ -265,4 +290,8 @@ export const sidecar = {
   ...silkMethods,
   ...spinMethods,
   ...interceptorMethods,
+  ...fuzzerMethods,
+  ...loadEngineMethods,
+  ...networkProbeMethods,
+  ...collectionRunnerMethods,
 } as const;

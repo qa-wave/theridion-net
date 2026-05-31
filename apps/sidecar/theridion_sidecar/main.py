@@ -192,6 +192,10 @@ from theridion_sidecar.api.spin import router as spin_router
 from theridion_sidecar.api.secrets_vault import router as secrets_vault_router
 from theridion_sidecar.api.interceptor import router as interceptor_router
 from theridion_sidecar.api.run_result_v2 import router as run_result_v2_router
+from theridion_sidecar.api.fuzzer import router as fuzzer_router
+from theridion_sidecar.api.load_engine import router as load_engine_router
+from theridion_sidecar.api.network_probe import router as network_probe_router
+from theridion_sidecar.api.collection_runner import router as collection_runner_router
 
 
 _EXEMPT_PATHS = {"/api/health", "/api/diagnostics", "/api/readiness"}
@@ -497,6 +501,10 @@ def create_app() -> FastAPI:
     app.include_router(secrets_vault_router)
     app.include_router(interceptor_router)
     app.include_router(run_result_v2_router)
+    app.include_router(fuzzer_router)
+    app.include_router(load_engine_router)
+    app.include_router(network_probe_router)
+    app.include_router(collection_runner_router)
     return app
 
 
