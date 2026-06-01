@@ -1,16 +1,80 @@
-"""OWASP security scanner: SQL injection, XSS, auth bypass, rate limit tests."""
+"""OWASP security scanner: SQL injection, XSS, auth bypass, rate limit tests.
+
+Scan results are persisted to ``$THERIDION_HOME/security_scans.jsonl`` (newest
+first, capped at 50 entries) so the SecurityWorkspacePanel can display past
+scans on first load without re-running anything.
+"""
 
 from __future__ import annotations
 
 import asyncio
+import json
+import os
+import tempfile
 import time
-from typing import Literal
+import uuid
+from pathlib import Path
+from typing import Any, Literal
 
 import httpx
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
+from theridion_sidecar.storage import home_dir
+
 router = APIRouter(prefix="/api/security", tags=["owasp-scanner"])
+
+_MAX_SAVED_SCANS = 50
+
+
+# ----- Persistence ----------------------------------------------------------
+
+
+def _security_scans_path() -> Path:
+    d = home_dir()
+    d.mkdir(parents=True, exist_ok=True)
+    return d / "security_scans.jsonl"
+
+
+def _read_saved_scans() -> list[dict[str, Any]]:
+    p = _security_scans_path()
+    if not p.exists():
+        return []
+    scans: list[dict[str, Any]] = []
+    for line in p.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            scans.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return scans
+
+
+def _write_saved_scans(scans: list[dict[str, Any]]) -> None:
+    p = _security_scans_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix="security_scans.", suffix=".tmp", dir=str(p.parent))
+    tmp_path = Path(tmp)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            for s in scans:
+                f.write(json.dumps(s, ensure_ascii=False) + "\n")
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, p)
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        raise
+
+
+def _persist_scan(scan_dict: dict[str, Any]) -> None:
+    scans = _read_saved_scans()
+    scans.insert(0, scan_dict)
+    if len(scans) > _MAX_SAVED_SCANS:
+        scans = scans[:_MAX_SAVED_SCANS]
+    _write_saved_scans(scans)
 
 SeverityLevel = Literal["critical", "high", "medium", "low", "info"]
 ScanType = Literal["sql_injection", "xss", "auth_bypass", "rate_limit"]
@@ -277,9 +341,57 @@ async def owasp_scan(body: OWASPScanInput) -> OWASPScanOutput:
     elapsed = (time.monotonic() - t0) * 1000
     score = _compute_score(findings)
 
-    return OWASPScanOutput(
+    result = OWASPScanOutput(
         findings=findings,
         score=score,
         scan_types_run=scan_types_run,
         elapsed_ms=round(elapsed, 1),
     )
+
+    # Persist so the panel can show historical scans on next launch.
+    saved_dict = result.model_dump(mode="json")
+    saved_dict["id"] = str(uuid.uuid4())
+    saved_dict["url"] = body.url
+    saved_dict["method"] = body.method
+    saved_dict["started_at"] = time.time() - elapsed / 1000
+    _persist_scan(saved_dict)
+
+    return result
+
+
+# ----- Saved scans endpoint -------------------------------------------------
+
+
+class SavedSecurityScan(BaseModel):
+    """Summary of a persisted security scan result."""
+
+    id: str
+    url: str
+    method: str
+    scan_types_run: list[str]
+    score: int
+    elapsed_ms: float
+    started_at: float
+    findings: list[dict[str, Any]] = Field(default_factory=list)
+
+
+@router.get("/saved", response_model=list[SavedSecurityScan])
+def list_saved_scans() -> list[SavedSecurityScan]:
+    """Return all persisted security scan results (newest first)."""
+    raw = _read_saved_scans()
+    out: list[SavedSecurityScan] = []
+    for s in raw:
+        try:
+            out.append(SavedSecurityScan(
+                id=s.get("id", str(uuid.uuid4())),
+                url=s.get("url", ""),
+                method=s.get("method", "GET"),
+                scan_types_run=s.get("scan_types_run", []),
+                score=int(s.get("score", 100)),
+                elapsed_ms=float(s.get("elapsed_ms", 0)),
+                started_at=float(s.get("started_at", 0)),
+                findings=s.get("findings", []),
+            ))
+        except Exception:
+            continue
+    return out

@@ -248,6 +248,10 @@ class _TokenAuthMiddleware(BaseHTTPMiddleware):
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Backend-2/3: shared httpx connection pool with graceful shutdown."""
+    # Seed demo data on first run (idempotent — no-op if data already exists).
+    from theridion_sidecar.seed import seed_all as _seed_all
+    _seed_all(storage.home_dir())
+
     limits = httpx.Limits(
         max_connections=100,
         max_keepalive_connections=20,

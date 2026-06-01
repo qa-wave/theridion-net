@@ -115,6 +115,7 @@ export type {
   HeaderInsightsOutput,
   BodySearchMatch, BodySearchOutput, BodySearchInput,
   JsonPathMatch, JsonPathOutput, XPathMatch, XPathOutput,
+  SavedLoadResult, SavedSecurityScan,
 } from "./analysis";
 
 export type { ParsedCurl, UniversalImportResult, ReplayDiff, ReplayOutput } from "./codegen";

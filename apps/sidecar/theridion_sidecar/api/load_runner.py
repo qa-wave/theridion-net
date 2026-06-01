@@ -3,21 +3,85 @@
 Uses pure asyncio + httpx (no extra dependencies like locust).  Returns
 structured results with percentile breakdowns and a per-second timeline
 suitable for charting on the frontend.
+
+Results are persisted to ``$THERIDION_HOME/load_results.jsonl`` (newest first,
+capped at 100 entries) so the LoadWorkspacePanel can show historical runs on
+first load without requiring a live test.
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 import math
+import os
 import statistics
+import tempfile
 import time
-from typing import Literal
+import uuid
+from pathlib import Path
+from typing import Any, Literal
 
 import httpx
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
+from theridion_sidecar.storage import home_dir
+
 router = APIRouter(prefix="/api/loadtest", tags=["loadtest"])
+
+_MAX_SAVED_RESULTS = 100
+
+
+# ----- Persistence ----------------------------------------------------------
+
+
+def _load_results_path() -> Path:
+    d = home_dir()
+    d.mkdir(parents=True, exist_ok=True)
+    return d / "load_results.jsonl"
+
+
+def _read_saved_results() -> list[dict[str, Any]]:
+    p = _load_results_path()
+    if not p.exists():
+        return []
+    results: list[dict[str, Any]] = []
+    for line in p.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            results.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return results
+
+
+def _write_saved_results(results: list[dict[str, Any]]) -> None:
+    p = _load_results_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix="load_results.", suffix=".tmp", dir=str(p.parent))
+    tmp_path = Path(tmp)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            for r in results:
+                f.write(json.dumps(r, ensure_ascii=False) + "\n")
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, p)
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        raise
+
+
+def _persist_result(result_dict: dict[str, Any]) -> None:
+    """Prepend *result_dict* to the saved results file (newest first, capped)."""
+    results = _read_saved_results()
+    results.insert(0, result_dict)
+    if len(results) > _MAX_SAVED_RESULTS:
+        results = results[:_MAX_SAVED_RESULTS]
+    _write_saved_results(results)
 
 
 # ----- Models ---------------------------------------------------------------
@@ -223,3 +287,65 @@ async def run_full_loadtest(cfg: LoadRunConfig) -> LoadRunResult:
         duration_seconds=round(actual_duration, 2),
         timeline=timeline,
     )
+
+    # Persist result so the frontend can show it on next launch.
+    saved_dict = result.model_dump(mode="json")
+    saved_dict["id"] = str(uuid.uuid4())
+    saved_dict["url"] = cfg.url
+    saved_dict["method"] = cfg.method
+    saved_dict["virtual_users"] = cfg.virtual_users
+    saved_dict["ramp_up_seconds"] = cfg.ramp_up_seconds
+    saved_dict["started_at"] = time.time() - actual_duration
+    _persist_result(saved_dict)
+
+    return result
+
+
+# ----- Saved results endpoint -----------------------------------------------
+
+
+class SavedLoadResult(BaseModel):
+    """Summary view of a persisted load test result."""
+
+    id: str
+    url: str
+    method: str
+    virtual_users: int
+    duration_seconds: float
+    started_at: float
+    total_requests: int
+    successful: int
+    failed: int
+    avg_latency_ms: float
+    p95_ms: float
+    p99_ms: float
+    requests_per_second: float
+    errors: dict[str, int] = Field(default_factory=dict)
+
+
+@router.get("/saved", response_model=list[SavedLoadResult])
+def list_saved_results() -> list[SavedLoadResult]:
+    """Return all persisted load test results (newest first)."""
+    raw = _read_saved_results()
+    out: list[SavedLoadResult] = []
+    for r in raw:
+        try:
+            out.append(SavedLoadResult(
+                id=r.get("id", str(uuid.uuid4())),
+                url=r.get("url", ""),
+                method=r.get("method", "GET"),
+                virtual_users=r.get("virtual_users", 0),
+                duration_seconds=float(r.get("duration_seconds", 0)),
+                started_at=float(r.get("started_at", 0)),
+                total_requests=int(r.get("total_requests", 0)),
+                successful=int(r.get("successful", 0)),
+                failed=int(r.get("failed", 0)),
+                avg_latency_ms=float(r.get("avg_latency_ms", 0)),
+                p95_ms=float(r.get("p95_ms", 0)),
+                p99_ms=float(r.get("p99_ms", 0)),
+                requests_per_second=float(r.get("requests_per_second", 0)),
+                errors=r.get("errors", {}),
+            ))
+        except Exception:
+            continue
+    return out

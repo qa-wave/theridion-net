@@ -690,6 +690,10 @@ export const analysisMethods = {
       method: "POST",
       body: JSON.stringify(input),
     }),
+  listSavedLoadResults: () =>
+    call<SavedLoadResult[]>("/api/loadtest/saved"),
+  listSavedSecurityScans: () =>
+    call<SavedSecurityScan[]>("/api/security/saved"),
 } as const;
 
 // ---- OWASP Scanner types ---------------------------------------------------
@@ -972,4 +976,36 @@ export interface XPathMatch {
 export interface XPathOutput {
   matches: XPathMatch[];
   total: number;
+}
+
+// ---- Saved load test results ------------------------------------------------
+
+export interface SavedLoadResult {
+  id: string;
+  url: string;
+  method: string;
+  virtual_users: number;
+  duration_seconds: number;
+  started_at: number;
+  total_requests: number;
+  successful: number;
+  failed: number;
+  avg_latency_ms: number;
+  p95_ms: number;
+  p99_ms: number;
+  requests_per_second: number;
+  errors: Record<string, number>;
+}
+
+// ---- Saved security scan results --------------------------------------------
+
+export interface SavedSecurityScan {
+  id: string;
+  url: string;
+  method: string;
+  scan_types_run: string[];
+  score: number;
+  elapsed_ms: number;
+  started_at: number;
+  findings: OWASPFinding[];
 }

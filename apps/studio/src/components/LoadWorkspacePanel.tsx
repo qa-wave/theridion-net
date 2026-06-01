@@ -5,9 +5,9 @@
  * Displays live results with timeline chart, percentile metrics and pass/fail status.
  * Emits RunResult v2 to Hub when configured.
  */
-import { Activity, BarChart3, ChevronDown, ChevronRight, Loader2, Play, RefreshCw } from "lucide-react";
-import { useCallback, useState } from "react";
-import { sidecar, type LoadRunResult, type StoredCollection } from "../lib/sidecar";
+import { Activity, BarChart3, ChevronDown, ChevronRight, Clock, Loader2, Play, RefreshCw } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { sidecar, type LoadRunResult, type SavedLoadResult, type StoredCollection } from "../lib/sidecar";
 
 interface Props {
   collections: StoredCollection[];
@@ -99,10 +99,22 @@ function Timeline({ result }: { result: LoadRunResult }) {
 export function LoadWorkspacePanel({ collections, onToast }: Props) {
   const [cfg, setCfg] = useState<RunConfig>(DEFAULT_CONFIG);
   const [result, setResult] = useState<LoadRunResult | null>(null);
+  const [savedResults, setSavedResults] = useState<SavedLoadResult[]>([]);
+  const [selectedSaved, setSelectedSaved] = useState<SavedLoadResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [selectedCollection, setSelectedCollection] = useState<string>("");
+
+  // Load saved results on mount so the panel is populated immediately.
+  useEffect(() => {
+    sidecar.listSavedLoadResults().then((results) => {
+      setSavedResults(results);
+      if (results.length > 0 && !result) {
+        setSelectedSaved(results[0]);
+      }
+    }).catch(() => { /* sidecar not ready yet */ });
+  }, []);
 
   // Flatten collection requests for the URL picker
   const allRequests = collections.flatMap((c) =>
@@ -136,6 +148,9 @@ export function LoadWorkspacePanel({ collections, onToast }: Props) {
         think_time_ms: cfg.thinkTimeMs,
       });
       setResult(res);
+      setSelectedSaved(null);
+      // Refresh saved results list so the history sidebar updates.
+      sidecar.listSavedLoadResults().then(setSavedResults).catch(() => {});
       onToast?.("success", `Load test complete — ${res.total_requests} requests, ${res.requests_per_second.toFixed(1)} RPS`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -305,13 +320,74 @@ export function LoadWorkspacePanel({ collections, onToast }: Props) {
           </div>
         )}
 
-        {!result && !busy && !error && (
+        {!result && !busy && !error && !selectedSaved && savedResults.length === 0 && (
           <div className="flex h-full items-center justify-center text-neutral-500">
             <div className="text-center">
               <BarChart3 className="mx-auto h-12 w-12 text-neutral-700 mb-4" />
               <p className="text-sm font-medium text-neutral-400">No results yet</p>
               <p className="text-xs mt-1">Configure a target URL and start a test</p>
             </div>
+          </div>
+        )}
+
+        {/* Saved results history sidebar */}
+        {savedResults.length > 0 && !result && !busy && (
+          <div className="mb-4">
+            <div className="mb-2 flex items-center gap-1.5">
+              <Clock className="h-3 w-3 text-neutral-500" />
+              <span className="text-[10px] uppercase tracking-widest text-neutral-500">Recent Runs</span>
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {savedResults.slice(0, 8).map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => setSelectedSaved(r)}
+                  className={`shrink-0 rounded-lg border px-3 py-2 text-left transition ${
+                    selectedSaved?.id === r.id
+                      ? "border-orange-500/40 bg-orange-950/20"
+                      : "border-white/[0.06] bg-neutral-900/40 hover:border-white/[0.12]"
+                  }`}
+                >
+                  <div className="text-[10px] font-mono text-neutral-400 truncate max-w-[180px]">{r.method} {r.url.replace(/^https?:\/\/[^/]+/, "")}</div>
+                  <div className="mt-0.5 text-xs font-bold text-orange-400">{r.requests_per_second.toFixed(1)} RPS</div>
+                  <div className="text-[10px] text-neutral-600">{r.total_requests.toLocaleString()} req · {r.virtual_users} VU</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Selected saved result summary */}
+        {!result && !busy && selectedSaved && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-xs text-neutral-500">
+              <Clock className="h-3.5 w-3.5" />
+              <span>Saved run · {new Date(selectedSaved.started_at * 1000).toLocaleString()}</span>
+              <span className="ml-auto font-mono text-neutral-600 truncate max-w-xs">{selectedSaved.method} {selectedSaved.url}</span>
+            </div>
+            <div className="grid grid-cols-4 gap-3">
+              <MetricCard label="Total Requests" value={selectedSaved.total_requests.toLocaleString()} />
+              <MetricCard label="RPS" value={selectedSaved.requests_per_second.toFixed(1)} accent="text-orange-400" />
+              <MetricCard label="Successful" value={selectedSaved.successful.toLocaleString()} accent="text-emerald-400" />
+              <MetricCard label="Failed" value={selectedSaved.failed.toLocaleString()} accent={selectedSaved.failed > 0 ? "text-rose-400" : "text-neutral-400"} />
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <MetricCard label="Avg Latency" value={`${selectedSaved.avg_latency_ms.toFixed(0)}ms`} />
+              <MetricCard label="p95" value={`${selectedSaved.p95_ms.toFixed(0)}ms`} accent={selectedSaved.p95_ms > 1000 ? "text-amber-400" : undefined} />
+              <MetricCard label="p99" value={`${selectedSaved.p99_ms.toFixed(0)}ms`} accent={selectedSaved.p99_ms > 2000 ? "text-rose-400" : undefined} />
+            </div>
+            {Object.keys(selectedSaved.errors).length > 0 && (
+              <div className="rounded-lg border border-rose-800/30 bg-rose-950/10 p-3">
+                <div className="mb-2 text-[10px] uppercase tracking-widest text-rose-500">Errors</div>
+                {Object.entries(selectedSaved.errors).map(([err, count]) => (
+                  <div key={err} className="flex justify-between text-xs py-0.5">
+                    <span className="text-rose-400">{err}</span>
+                    <span className="text-neutral-500">{count}×</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

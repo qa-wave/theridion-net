@@ -7,6 +7,7 @@
 import {
   AlertTriangle,
   CheckCircle,
+  Clock,
   Info,
   Loader2,
   Play,
@@ -15,8 +16,8 @@ import {
   ShieldAlert,
   XCircle,
 } from "lucide-react";
-import { useCallback, useState } from "react";
-import { sidecar, type OWASPFinding, type OWASPScanInput, type OWASPScanOutput, type StoredCollection } from "../lib/sidecar";
+import { useCallback, useEffect, useState } from "react";
+import { sidecar, type OWASPFinding, type OWASPScanInput, type OWASPScanOutput, type SavedSecurityScan, type StoredCollection } from "../lib/sidecar";
 import { InterceptModal } from "./InterceptModal";
 
 interface Props {
@@ -72,10 +73,22 @@ export function SecurityWorkspacePanel({ collections, onToast, onSendToRequest }
   const [params, setParams] = useState("");
   const [scanTypes, setScanTypes] = useState<OWASPScanType[]>(["sql_injection", "xss", "auth_bypass", "rate_limit"]);
   const [result, setResult] = useState<OWASPScanOutput | null>(null);
+  const [savedScans, setSavedScans] = useState<SavedSecurityScan[]>([]);
+  const [selectedSaved, setSelectedSaved] = useState<SavedSecurityScan | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [interceptOpen, setInterceptOpen] = useState(false);
   const [selectedCollection, setSelectedCollection] = useState<string>("");
+
+  // Load saved scans on mount.
+  useEffect(() => {
+    sidecar.listSavedSecurityScans().then((scans) => {
+      setSavedScans(scans);
+      if (scans.length > 0 && !result) {
+        setSelectedSaved(scans[0]);
+      }
+    }).catch(() => {});
+  }, []);
 
   const allRequests = collections.flatMap((c) =>
     c.items.filter((it) => !it.is_folder).map((it) => ({
@@ -121,6 +134,9 @@ export function SecurityWorkspacePanel({ collections, onToast, onSendToRequest }
       };
       const res = await sidecar.owaspScan(inp);
       setResult(res);
+      setSelectedSaved(null);
+      // Refresh saved scans list.
+      sidecar.listSavedSecurityScans().then(setSavedScans).catch(() => {});
       const critHigh = res.findings.filter((f) => f.severity === "critical" || f.severity === "high").length;
       if (critHigh > 0) {
         onToast?.("error", `Security scan: ${critHigh} critical/high finding${critHigh !== 1 ? "s" : ""}`);
@@ -277,13 +293,92 @@ export function SecurityWorkspacePanel({ collections, onToast, onSendToRequest }
           </div>
         )}
 
-        {!result && !busy && !error && (
+        {!result && !busy && !error && !selectedSaved && savedScans.length === 0 && (
           <div className="flex h-full items-center justify-center text-neutral-500">
             <div className="text-center">
               <Shield className="mx-auto h-12 w-12 text-neutral-700 mb-4" />
               <p className="text-sm font-medium text-neutral-400">No results yet</p>
               <p className="text-xs mt-1">Configure a target URL and run a scan</p>
             </div>
+          </div>
+        )}
+
+        {/* Saved scans history */}
+        {savedScans.length > 0 && !result && !busy && (
+          <div className="mb-4">
+            <div className="mb-2 flex items-center gap-1.5">
+              <Clock className="h-3 w-3 text-neutral-500" />
+              <span className="text-[10px] uppercase tracking-widest text-neutral-500">Recent Scans</span>
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {savedScans.slice(0, 6).map((s) => {
+                const scoreColor = s.score >= 80 ? "text-emerald-400" : s.score >= 50 ? "text-amber-400" : "text-rose-400";
+                const critHigh = s.findings.filter((f) => f.severity === "critical" || f.severity === "high").length;
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => setSelectedSaved(s)}
+                    className={`shrink-0 rounded-lg border px-3 py-2 text-left transition ${
+                      selectedSaved?.id === s.id
+                        ? "border-red-500/40 bg-red-950/20"
+                        : "border-white/[0.06] bg-neutral-900/40 hover:border-white/[0.12]"
+                    }`}
+                  >
+                    <div className="text-[10px] font-mono text-neutral-400 truncate max-w-[180px]">{s.url.replace(/^https?:\/\/[^/]+/, "") || "/"}</div>
+                    <div className={`mt-0.5 text-xs font-bold ${scoreColor}`}>{s.score}/100</div>
+                    <div className="text-[10px] text-neutral-600">
+                      {s.findings.length} finding{s.findings.length !== 1 ? "s" : ""}
+                      {critHigh > 0 && <span className="text-rose-500 ml-1">· {critHigh} crit/high</span>}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Selected saved scan display */}
+        {!result && !busy && selectedSaved && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-xs text-neutral-500">
+              <Clock className="h-3.5 w-3.5" />
+              <span>Saved scan · {new Date(selectedSaved.started_at * 1000).toLocaleString()}</span>
+              <span className="ml-auto font-mono text-neutral-600 truncate max-w-xs">{selectedSaved.url}</span>
+            </div>
+            <div className="flex items-start gap-4 rounded-lg border border-white/[0.06] bg-neutral-900/40 p-4">
+              <ScoreRing score={selectedSaved.score} />
+              <div className="flex-1 space-y-1">
+                <div className="text-sm font-medium text-neutral-200">
+                  {selectedSaved.findings.length === 0
+                    ? "No findings — target looks clean"
+                    : `${selectedSaved.findings.length} finding${selectedSaved.findings.length !== 1 ? "s" : ""} detected`}
+                </div>
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {selectedSaved.scan_types_run.map((t) => (
+                    <span key={t} className="rounded border border-white/[0.06] bg-neutral-800/50 px-1.5 py-0.5 text-[10px] text-neutral-400">
+                      {t.replace("_", " ")}
+                    </span>
+                  ))}
+                </div>
+                <div className="text-[10px] text-neutral-600 mt-1">Elapsed: {selectedSaved.elapsed_ms.toFixed(0)}ms</div>
+              </div>
+            </div>
+            {selectedSaved.findings.length > 0 && (
+              <div className="space-y-2">
+                {[...selectedSaved.findings]
+                  .sort((a, b) => SEVERITY_ORDER[a.severity as SeverityLevel] - SEVERITY_ORDER[b.severity as SeverityLevel])
+                  .map((f, i) => (
+                    <FindingCard key={i} finding={f as OWASPFinding} onSendToRequest={onSendToRequest ? () => onSendToRequest("GET", selectedSaved.url, {}, null) : undefined} />
+                  ))}
+              </div>
+            )}
+            {selectedSaved.findings.length === 0 && (
+              <div className="flex items-center gap-2 rounded-lg border border-emerald-800/30 bg-emerald-950/10 px-4 py-3 text-sm text-emerald-400">
+                <CheckCircle className="h-4 w-4 shrink-0" />
+                No vulnerabilities detected for selected scan types
+              </div>
+            )}
           </div>
         )}
 
