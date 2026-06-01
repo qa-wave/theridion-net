@@ -1264,6 +1264,645 @@ def _atomic_jsonl_write(path: Path, rows: list[dict]) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Fixed UUIDs for newly-seeded entities
+# ---------------------------------------------------------------------------
+
+# Environments
+_ENV_PRODUCTION_ID  = "e1111111-0001-4000-8000-000000000001"
+_ENV_STAGING_ID     = "e1111111-0002-4000-8000-000000000002"
+_ENV_LOCAL_ID       = "e1111111-0003-4000-8000-000000000003"
+_ENV_GRAPHQL_ID     = "e1111111-0004-4000-8000-000000000004"
+
+# Monitors (reference real collection ids and env ids defined above)
+_MON_HEALTH_ID      = "d2222222-0001-4000-8000-000000000001"
+_MON_USERS_ID       = "d2222222-0002-4000-8000-000000000002"
+_MON_ORDERS_ID      = "d2222222-0003-4000-8000-000000000003"
+
+# Snippets
+_SNIP_AUTH_BEARER_ID = "snip0001-0001-4000-8000-000000000001"
+_SNIP_JSON_POST_ID   = "snip0001-0002-4000-8000-000000000002"
+_SNIP_PAGINATION_ID  = "snip0001-0003-4000-8000-000000000003"
+_SNIP_GRAPHQL_ID     = "snip0001-0004-4000-8000-000000000004"
+
+# Mock recording session
+_MOCK_SESSION_ID    = "mock-session-demo-001"
+
+
+# ---------------------------------------------------------------------------
+# Environments seed
+# ---------------------------------------------------------------------------
+
+def _seed_environments(envs_dir: Path) -> None:
+    """Write demo environments if the directory is empty."""
+    existing = list(envs_dir.glob("*.json"))
+    if existing:
+        return
+
+    logger.info("Seeding demo environments…")
+
+    environments = [
+        {
+            "id": _ENV_PRODUCTION_ID,
+            "name": "Production",
+            "variables": [
+                {"name": "base_url", "value": "https://api.shop.example.com/v2", "enabled": True},
+                {"name": "api_key", "value": "sk_live_demo_key_PROD_99999", "enabled": True},
+                {"name": "timeout_ms", "value": "5000", "enabled": True},
+                {"name": "log_level", "value": "error", "enabled": True},
+                {"name": "cdn_url", "value": "https://cdn.shop.example.com", "enabled": True},
+            ],
+        },
+        {
+            "id": _ENV_STAGING_ID,
+            "name": "Staging",
+            "variables": [
+                {"name": "base_url", "value": "https://api-staging.shop.example.com/v2", "enabled": True},
+                {"name": "api_key", "value": "sk_staging_demo_key_12345", "enabled": True},
+                {"name": "timeout_ms", "value": "10000", "enabled": True},
+                {"name": "log_level", "value": "info", "enabled": True},
+                {"name": "cdn_url", "value": "https://cdn-staging.shop.example.com", "enabled": True},
+                {"name": "mock_payments", "value": "true", "enabled": True},
+            ],
+        },
+        {
+            "id": _ENV_LOCAL_ID,
+            "name": "Local Dev",
+            "variables": [
+                {"name": "base_url", "value": "http://localhost:3000/v2", "enabled": True},
+                {"name": "api_key", "value": "sk_test_demo_key_12345", "enabled": True},
+                {"name": "timeout_ms", "value": "30000", "enabled": True},
+                {"name": "log_level", "value": "debug", "enabled": True},
+                {"name": "cdn_url", "value": "http://localhost:3001", "enabled": True},
+                {"name": "mock_payments", "value": "true", "enabled": True},
+                {"name": "debug_mode", "value": "true", "enabled": True},
+            ],
+        },
+        {
+            "id": _ENV_GRAPHQL_ID,
+            "name": "GitHub GraphQL",
+            "variables": [
+                {"name": "endpoint", "value": "https://api.github.com/graphql", "enabled": True},
+                {"name": "token", "value": "ghp_demo_token_replace_me", "enabled": True},
+                {"name": "viewer_login", "value": "alice-dev", "enabled": True},
+            ],
+        },
+    ]
+
+    envs_dir.mkdir(parents=True, exist_ok=True)
+    for env_data in environments:
+        env_path = envs_dir / f"{env_data['id']}.json"
+        _atomic_json_write(env_path, env_data)
+        logger.info("  Seeded environment: %s (%s)", env_data["name"], env_data["id"])
+
+
+# ---------------------------------------------------------------------------
+# Global variables seed
+# ---------------------------------------------------------------------------
+
+def _seed_globals(globals_path: Path) -> None:
+    """Write demo global variables if the file does not exist."""
+    if globals_path.exists() and globals_path.stat().st_size > 0:
+        return
+
+    logger.info("Seeding demo global variables…")
+
+    store = {
+        "variables": [
+            {"name": "app_name", "value": "Theridion Net Demo", "enabled": True},
+            {"name": "demo_user_id", "value": "usr_001", "enabled": True},
+            {"name": "auth_url", "value": "https://auth.shop.example.com", "enabled": True},
+            {"name": "client_id", "value": "client_demo_theridion", "enabled": True},
+            {"name": "client_secret", "value": "secret_demo_replace_in_prod", "enabled": True},
+            {"name": "webhook_url", "value": "https://hooks.example.com/theridion", "enabled": True},
+            {"name": "tracing_header", "value": "X-Request-Id", "enabled": True},
+            # Disabled example showing how to override per-run
+            {"name": "debug_override", "value": "false", "enabled": False},
+        ],
+    }
+    _atomic_json_write(globals_path, store)
+    logger.info("  Seeded %d global variables", len(store["variables"]))
+
+
+# ---------------------------------------------------------------------------
+# User snippets seed
+# ---------------------------------------------------------------------------
+
+def _seed_snippets(snippets_dir: Path) -> None:
+    """Write demo user snippets if the directory is empty."""
+    existing = list(snippets_dir.glob("*.json"))
+    if existing:
+        return
+
+    logger.info("Seeding demo user snippets…")
+
+    now = _ts(0)
+    snippets = [
+        {
+            "id": _SNIP_AUTH_BEARER_ID,
+            "name": "Bearer Token Auth Header",
+            "category": "Auth",
+            "description": "Adds Authorization Bearer header from environment variable",
+            "method": "GET",
+            "url": "{{base_url}}/me",
+            "headers": {"Authorization": "Bearer {{api_key}}", "Accept": "application/json"},
+            "body": None,
+            "auth": None,
+            "tags": ["auth", "bearer", "jwt"],
+            "created_at": _ts(30),
+            "updated_at": _ts(5),
+            "builtin": False,
+        },
+        {
+            "id": _SNIP_JSON_POST_ID,
+            "name": "JSON POST with CSRF",
+            "category": "Common",
+            "description": "POST request with JSON body and CSRF token header",
+            "method": "POST",
+            "url": "{{base_url}}/resources",
+            "headers": {
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "X-CSRF-Token": "{{csrf_token}}",
+                "Authorization": "Bearer {{api_key}}",
+            },
+            "body": json.dumps({"name": "example", "type": "demo", "active": True}, indent=2),
+            "auth": None,
+            "tags": ["post", "json", "csrf"],
+            "created_at": _ts(25),
+            "updated_at": _ts(3),
+            "builtin": False,
+        },
+        {
+            "id": _SNIP_PAGINATION_ID,
+            "name": "Paginated List Request",
+            "category": "Common",
+            "description": "GET request with cursor-based pagination parameters",
+            "method": "GET",
+            "url": "{{base_url}}/items?limit=20&cursor={{cursor}}&sort=created_at&order=desc",
+            "headers": {"Accept": "application/json", "X-API-Key": "{{api_key}}"},
+            "body": None,
+            "auth": None,
+            "tags": ["pagination", "list", "cursor"],
+            "created_at": _ts(20),
+            "updated_at": _ts(7),
+            "builtin": False,
+        },
+        {
+            "id": _SNIP_GRAPHQL_ID,
+            "name": "GraphQL Mutation Template",
+            "category": "GraphQL",
+            "description": "Mutation template with variables and error handling",
+            "method": "POST",
+            "url": "{{endpoint}}",
+            "headers": {
+                "Content-Type": "application/json",
+                "Authorization": "bearer {{token}}",
+            },
+            "body": json.dumps({
+                "query": "mutation ($input: CreateResourceInput!) { createResource(input: $input) { id status errors { field message } } }",
+                "variables": {"input": {"name": "Demo", "type": "test"}},
+            }, indent=2),
+            "auth": None,
+            "tags": ["graphql", "mutation", "template"],
+            "created_at": _ts(15),
+            "updated_at": _ts(2),
+            "builtin": False,
+        },
+    ]
+
+    snippets_dir.mkdir(parents=True, exist_ok=True)
+    for snip in snippets:
+        snip_path = snippets_dir / f"{snip['id']}.json"
+        _atomic_json_write(snip_path, snip)
+        logger.info("  Seeded snippet: %s", snip["name"])
+
+
+# ---------------------------------------------------------------------------
+# Monitors seed
+# ---------------------------------------------------------------------------
+
+def _seed_monitors(monitors_path: Path) -> None:
+    """Write demo monitors if the file does not exist."""
+    if monitors_path.exists() and monitors_path.stat().st_size > 0:
+        return
+
+    logger.info("Seeding demo monitors…")
+
+    monitors = [
+        {
+            "id": _MON_HEALTH_ID,
+            "collection_id": _COL_REST_ID,
+            "environment_id": _ENV_PRODUCTION_ID,
+            "cron": "*/5 * * * *",
+            "enabled": True,
+            "last_run": None,
+            "last_status": None,
+        },
+        {
+            "id": _MON_USERS_ID,
+            "collection_id": _COL_REST_ID,
+            "environment_id": _ENV_STAGING_ID,
+            "cron": "0 * * * *",
+            "enabled": True,
+            "last_run": None,
+            "last_status": None,
+        },
+        {
+            "id": _MON_ORDERS_ID,
+            "collection_id": _COL_SOAP_ID,
+            "environment_id": _ENV_STAGING_ID,
+            "cron": "0 6 * * *",
+            "enabled": False,
+            "last_run": None,
+            "last_status": None,
+        },
+    ]
+
+    monitors_path.parent.mkdir(parents=True, exist_ok=True)
+    _atomic_json_write(monitors_path, monitors)
+    logger.info("  Seeded %d monitors", len(monitors))
+
+
+# ---------------------------------------------------------------------------
+# Service map seed
+# ---------------------------------------------------------------------------
+
+def _seed_servicemap(servicemap_path: Path) -> None:
+    """Write a demo service dependency graph if the file does not exist."""
+    if servicemap_path.exists() and servicemap_path.stat().st_size > 0:
+        return
+
+    logger.info("Seeding demo service map…")
+
+    # Node IDs
+    n_api    = "sm-node-0001-4000-8000-000000000001"
+    n_auth   = "sm-node-0002-4000-8000-000000000002"
+    n_db     = "sm-node-0003-4000-8000-000000000003"
+    n_cache  = "sm-node-0004-4000-8000-000000000004"
+    n_pay    = "sm-node-0005-4000-8000-000000000005"
+    n_cdn    = "sm-node-0006-4000-8000-000000000006"
+    n_notify = "sm-node-0007-4000-8000-000000000007"
+
+    graph = {
+        "nodes": [
+            {"id": n_api,    "label": "E-Commerce API",      "url": "https://api.shop.example.com",        "x": 300, "y": 200, "color": "#06b6d4"},
+            {"id": n_auth,   "label": "Auth Service",         "url": "https://auth.shop.example.com",       "x": 100, "y": 100, "color": "#8b5cf6"},
+            {"id": n_db,     "label": "PostgreSQL",           "url": "postgresql://db.shop.example.com",    "x": 100, "y": 350, "color": "#10b981"},
+            {"id": n_cache,  "label": "Redis Cache",          "url": "redis://cache.shop.example.com",      "x": 500, "y": 100, "color": "#f59e0b"},
+            {"id": n_pay,    "label": "Payment Gateway",      "url": "https://payments.example.com",        "x": 500, "y": 350, "color": "#ef4444"},
+            {"id": n_cdn,    "label": "CDN",                  "url": "https://cdn.shop.example.com",        "x": 300, "y": 450, "color": "#ec4899"},
+            {"id": n_notify, "label": "Notification Service", "url": "https://notify.shop.example.com",     "x": 700, "y": 200, "color": "#6366f1"},
+        ],
+        "edges": [
+            {"id": "sm-edge-001", "source": n_api,  "target": n_auth,   "label": "validates token"},
+            {"id": "sm-edge-002", "source": n_api,  "target": n_db,     "label": "read/write"},
+            {"id": "sm-edge-003", "source": n_api,  "target": n_cache,  "label": "session cache"},
+            {"id": "sm-edge-004", "source": n_api,  "target": n_pay,    "label": "charge card"},
+            {"id": "sm-edge-005", "source": n_api,  "target": n_cdn,    "label": "serve assets"},
+            {"id": "sm-edge-006", "source": n_api,  "target": n_notify, "label": "order events"},
+            {"id": "sm-edge-007", "source": n_pay,  "target": n_notify, "label": "payment events"},
+        ],
+    }
+
+    servicemap_path.parent.mkdir(parents=True, exist_ok=True)
+    _atomic_json_write(servicemap_path, graph)
+    logger.info("  Seeded service map (%d nodes, %d edges)",
+                len(graph["nodes"]), len(graph["edges"]))
+
+
+# ---------------------------------------------------------------------------
+# Performance budgets + violations seed
+# ---------------------------------------------------------------------------
+
+def _seed_perf_budgets(budgets_path: Path, violations_path: Path) -> None:
+    """Write demo performance budgets and violations if files are absent/empty."""
+    if budgets_path.exists() and budgets_path.stat().st_size > 0:
+        return
+
+    logger.info("Seeding demo performance budgets…")
+
+    budgets = [
+        {
+            "id": "pbud0001",
+            "url_pattern": "https://api.shop.example.com/v2/health",
+            "method": "GET",
+            "max_time_ms": 100,
+            "max_size_bytes": 4096,
+            "p95_time_ms": 80,
+            "alert_threshold": 3,
+            "name": "Health Check — critical path",
+        },
+        {
+            "id": "pbud0002",
+            "url_pattern": "https://api.shop.example.com/v2/products*",
+            "method": "GET",
+            "max_time_ms": 250,
+            "max_size_bytes": 102400,
+            "p95_time_ms": 200,
+            "alert_threshold": 5,
+            "name": "Product List — catalogue API",
+        },
+        {
+            "id": "pbud0003",
+            "url_pattern": "https://api.shop.example.com/v2/orders",
+            "method": "POST",
+            "max_time_ms": 500,
+            "max_size_bytes": None,
+            "p95_time_ms": 400,
+            "alert_threshold": 3,
+            "name": "Place Order — checkout critical",
+        },
+        {
+            "id": "pbud0004",
+            "url_pattern": "https://api.shop.example.com/v2/users*",
+            "method": None,
+            "max_time_ms": 200,
+            "max_size_bytes": 51200,
+            "p95_time_ms": 150,
+            "alert_threshold": 5,
+            "name": "User API — all methods",
+        },
+    ]
+
+    budgets_path.parent.mkdir(parents=True, exist_ok=True)
+    _atomic_json_write(budgets_path, budgets)
+    logger.info("  Seeded %d performance budgets", len(budgets))
+
+    if violations_path.exists() and violations_path.stat().st_size > 0:
+        return
+
+    logger.info("Seeding demo performance violations…")
+
+    violations = [
+        {
+            "budget_id": "pbud0003",
+            "budget_name": "Place Order — checkout critical",
+            "metric": "max_time_ms",
+            "actual": 843.2,
+            "threshold": 500.0,
+            "exceeded_by_percent": 68.6,
+            "url": "https://api.shop.example.com/v2/orders",
+            "method": "POST",
+            "timestamp": _ts(5, 9, 0),
+        },
+        {
+            "budget_id": "pbud0004",
+            "budget_name": "User API — all methods",
+            "metric": "p95_time_ms",
+            "actual": 214.6,
+            "threshold": 150.0,
+            "exceeded_by_percent": 43.1,
+            "url": "https://api.shop.example.com/v2/users",
+            "method": "GET",
+            "timestamp": _ts(2, 11, 0),
+        },
+        {
+            "budget_id": "pbud0002",
+            "budget_name": "Product List — catalogue API",
+            "metric": "max_time_ms",
+            "actual": 491.8,
+            "threshold": 250.0,
+            "exceeded_by_percent": 96.7,
+            "url": "https://api.shop.example.com/v2/products?category=electronics",
+            "method": "GET",
+            "timestamp": _ts(10, 14, 0),
+        },
+    ]
+
+    _atomic_json_write(violations_path, violations)
+    logger.info("  Seeded %d performance violations", len(violations))
+
+
+# ---------------------------------------------------------------------------
+# Mock recordings seed
+# ---------------------------------------------------------------------------
+
+def _seed_mock_recordings(recordings_dir: Path) -> None:
+    """Write a demo mock recording session if the directory is empty."""
+    existing = list(recordings_dir.glob("*.json"))
+    if existing:
+        return
+
+    logger.info("Seeding demo mock recording…")
+
+    recording = {
+        "session_id": _MOCK_SESSION_ID,
+        "target_url": "https://api.shop.example.com",
+        "recorded_at": _ts(7, 10, 0),
+        "interactions": [
+            {
+                "method": "GET",
+                "path": "/v2/health",
+                "query": "",
+                "request_headers": {"Accept": "application/json"},
+                "request_body": None,
+                "status": 200,
+                "response_headers": {"Content-Type": "application/json"},
+                "response_body": json.dumps({"status": "ok", "version": "2.4.1"}),
+                "elapsed_ms": 14.2,
+                "timestamp": _ts(7, 10, 0),
+            },
+            {
+                "method": "GET",
+                "path": "/v2/users",
+                "query": "page=1&limit=20",
+                "request_headers": {"Accept": "application/json", "X-API-Key": "sk_test_demo_key_12345"},
+                "request_body": None,
+                "status": 200,
+                "response_headers": {"Content-Type": "application/json"},
+                "response_body": json.dumps({
+                    "success": True,
+                    "data": [
+                        {"id": "usr_001", "email": "alice@example.com", "role": "customer"},
+                        {"id": "usr_002", "email": "bob@example.com", "role": "admin"},
+                    ],
+                    "total": 2,
+                    "page": 1,
+                }),
+                "elapsed_ms": 87.3,
+                "timestamp": _ts(7, 10, 1),
+            },
+            {
+                "method": "GET",
+                "path": "/v2/products",
+                "query": "category=electronics&in_stock=true",
+                "request_headers": {"Accept": "application/json"},
+                "request_body": None,
+                "status": 200,
+                "response_headers": {"Content-Type": "application/json", "Cache-Control": "max-age=60"},
+                "response_body": json.dumps({
+                    "success": True,
+                    "data": [{"sku": "ELEC-001", "name": "Wireless Mouse", "price": 49.99, "stock": 234}],
+                    "total": 1,
+                }),
+                "elapsed_ms": 62.1,
+                "timestamp": _ts(7, 10, 2),
+            },
+            {
+                "method": "POST",
+                "path": "/v2/orders",
+                "query": "",
+                "request_headers": {"Content-Type": "application/json", "Authorization": "Bearer sk_test_demo_key_12345"},
+                "request_body": json.dumps({"user_id": "usr_001", "items": [{"sku": "ELEC-001", "qty": 1, "unit_price": 49.99}]}),
+                "status": 201,
+                "response_headers": {"Content-Type": "application/json"},
+                "response_body": json.dumps({"order_id": "ord_demo_001", "status": "pending", "total": 49.99}),
+                "elapsed_ms": 142.8,
+                "timestamp": _ts(7, 10, 3),
+            },
+        ],
+    }
+
+    recordings_dir.mkdir(parents=True, exist_ok=True)
+    rec_path = recordings_dir / f"{_MOCK_SESSION_ID}.json"
+    _atomic_json_write(rec_path, recording)
+    logger.info("  Seeded mock recording: %s (%d interactions)",
+                _MOCK_SESSION_ID, len(recording["interactions"]))
+
+
+# ---------------------------------------------------------------------------
+# Interceptor flows seed  (in-process state — injected at startup)
+# ---------------------------------------------------------------------------
+
+def _seed_interceptor_flows() -> None:
+    """Inject demo captured flows into the interceptor's in-memory registry.
+
+    The interceptor uses a module-level dict ``_flows`` — we inject entries
+    only when that dict is empty so real flows are never clobbered.
+    """
+    try:
+        from theridion_sidecar.api import interceptor as _ic
+        if _ic._flows:
+            return
+
+        logger.info("Seeding demo interceptor flows…")
+
+        demo_flows_data = [
+            {
+                "flow_id": "flow-demo-0001-4000-8000-000000000001",
+                "timestamp": _ts(0.5, 9, 0),
+                "method": "GET",
+                "url": "https://api.shop.example.com/v2/users?page=1&limit=20",
+                "request_headers": {"Accept": "application/json", "X-API-Key": "sk_test_demo_key_12345"},
+                "request_body": None,
+                "status_code": 200,
+                "response_headers": {"Content-Type": "application/json", "X-Request-Id": "req_abc001"},
+                "response_body": '{"success":true,"data":[{"id":"usr_001","email":"alice@example.com"}],"total":42}',
+                "elapsed_ms": 91.6,
+                "state": "forwarded",
+                "flags": [],
+                "error": None,
+            },
+            {
+                "flow_id": "flow-demo-0002-4000-8000-000000000002",
+                "timestamp": _ts(0.4, 9, 5),
+                "method": "POST",
+                "url": "https://api.shop.example.com/v2/orders",
+                "request_headers": {"Content-Type": "application/json", "Authorization": "Bearer sk_test_demo_key_12345"},
+                "request_body": '{"user_id":"usr_001","items":[{"sku":"ELEC-001","qty":1,"unit_price":49.99}]}',
+                "status_code": 201,
+                "response_headers": {"Content-Type": "application/json"},
+                "response_body": '{"order_id":"ord_demo_001","status":"pending","total":49.99}',
+                "elapsed_ms": 142.8,
+                "state": "forwarded",
+                "flags": [
+                    {
+                        "type": "missing_header",
+                        "severity": "medium",
+                        "location": "response_headers",
+                        "detail": "Missing Content-Security-Policy header",
+                    },
+                    {
+                        "type": "missing_header",
+                        "severity": "low",
+                        "location": "response_headers",
+                        "detail": "Missing X-Content-Type-Options header",
+                    },
+                ],
+                "error": None,
+            },
+            {
+                "flow_id": "flow-demo-0003-4000-8000-000000000003",
+                "timestamp": _ts(0.3, 9, 10),
+                "method": "GET",
+                "url": "https://api.shop.example.com/v2/products/ELEC-999",
+                "request_headers": {"Accept": "application/json"},
+                "request_body": None,
+                "status_code": 404,
+                "response_headers": {"Content-Type": "application/json"},
+                "response_body": '{"error":"product_not_found","message":"Product ELEC-999 not found"}',
+                "elapsed_ms": 44.5,
+                "state": "forwarded",
+                "flags": [
+                    {
+                        "type": "missing_header",
+                        "severity": "medium",
+                        "location": "response_headers",
+                        "detail": "Missing Content-Security-Policy header",
+                    },
+                ],
+                "error": None,
+            },
+            {
+                "flow_id": "flow-demo-0004-4000-8000-000000000004",
+                "timestamp": _ts(0.1, 10, 0),
+                "method": "DELETE",
+                "url": "https://api.shop.example.com/v2/users/usr_old_999",
+                "request_headers": {"X-API-Key": "sk_test_demo_key_12345"},
+                "request_body": None,
+                "status_code": 204,
+                "response_headers": {},
+                "response_body": "",
+                "elapsed_ms": 67.8,
+                "state": "forwarded",
+                "flags": [],
+                "error": None,
+            },
+        ]
+
+        for flow_data in demo_flows_data:
+            flow = _ic.CapturedFlow(**flow_data)
+            _ic._flows[flow.flow_id] = flow
+
+        logger.info("  Seeded %d interceptor flows", len(demo_flows_data))
+    except Exception:
+        logger.debug("Could not seed interceptor flows (non-fatal)", exc_info=True)
+
+
+# ---------------------------------------------------------------------------
+# Webhooks seed
+# ---------------------------------------------------------------------------
+
+def _seed_webhooks(webhooks_path: Path) -> None:
+    """Write demo webhooks if the file does not exist."""
+    if webhooks_path.exists() and webhooks_path.stat().st_size > 0:
+        return
+
+    logger.info("Seeding demo webhooks…")
+
+    webhooks = [
+        {
+            "id": "wh000001",
+            "collection_id": _COL_REST_ID,
+            "environment_id": _ENV_STAGING_ID,
+            "url": "https://hooks.example.com/theridion/ci-trigger",
+            "enabled": True,
+        },
+        {
+            "id": "wh000002",
+            "collection_id": _COL_GRAPHQL_ID,
+            "environment_id": _ENV_LOCAL_ID,
+            "url": "https://hooks.example.com/theridion/graphql-smoke",
+            "enabled": False,
+        },
+    ]
+
+    webhooks_path.parent.mkdir(parents=True, exist_ok=True)
+    _atomic_json_write(webhooks_path, webhooks)
+    logger.info("  Seeded %d webhooks", len(webhooks))
+
+
+# ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
 
@@ -1274,5 +1913,14 @@ def seed_all(home: Path) -> None:
         _seed_history(home / "history.jsonl")
         _seed_load_results(home / "load_results.jsonl")
         _seed_security_scans(home / "security_scans.jsonl")
+        _seed_environments(home / "environments")
+        _seed_globals(home / "globals.json")
+        _seed_snippets(home / "snippets")
+        _seed_monitors(home / "monitors.json")
+        _seed_servicemap(home / "servicemap.json")
+        _seed_perf_budgets(home / "perf_budgets.json", home / "perf_violations.json")
+        _seed_mock_recordings(home / "mock_recordings")
+        _seed_interceptor_flows()
+        _seed_webhooks(home / "webhooks.json")
     except Exception:
         logger.exception("Seed failed (non-fatal — continuing without demo data)")
