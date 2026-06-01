@@ -17,9 +17,10 @@ import {
   XCircle,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { sidecar, type OWASPFinding, type OWASPScanInput, type OWASPScanOutput, type SavedSecurityScan, type StoredCollection } from "../lib/sidecar";
+import { sidecar, isTauri, type OWASPFinding, type OWASPScanInput, type OWASPScanOutput, type SavedSecurityScan, type StoredCollection } from "../lib/sidecar";
 import { InterceptModal } from "./InterceptModal";
 import { useT } from "../lib/i18n/context";
+import { DEMO_SECURITY_RESULT } from "../lib/demoData";
 
 interface Props {
   collections: StoredCollection[];
@@ -82,15 +83,23 @@ export function SecurityWorkspacePanel({ collections, onToast, onSendToRequest }
   const [error, setError] = useState<string | null>(null);
   const [interceptOpen, setInterceptOpen] = useState(false);
   const [selectedCollection, setSelectedCollection] = useState<string>("");
+  const [isDemoMode, setIsDemoMode] = useState(false);
 
   // Load saved scans on mount.
+  // In browser-demo mode (no Tauri, sidecar unreachable) inject bundled demo data.
   useEffect(() => {
     sidecar.listSavedSecurityScans().then((scans) => {
       setSavedScans(scans);
       if (scans.length > 0 && !result) {
         setSelectedSaved(scans[0]);
       }
-    }).catch(() => {});
+    }).catch(() => {
+      if (!isTauri()) {
+        setResult(DEMO_SECURITY_RESULT);
+        setUrl("https://api.example.com/api/users");
+        setIsDemoMode(true);
+      }
+    });
   }, []);
 
   const allRequests = collections.flatMap((c) =>
@@ -281,6 +290,14 @@ export function SecurityWorkspacePanel({ collections, onToast, onSendToRequest }
 
       {/* Right: Results */}
       <div className="flex-1 overflow-y-auto p-6">
+        {isDemoMode && result && (
+          <div className="mb-4 flex items-center gap-2 rounded-lg border border-emerald-800/30 bg-emerald-950/20 px-3 py-2 text-xs text-emerald-400">
+            <Shield className="h-3.5 w-3.5 shrink-0" />
+            <span>
+              <strong>Demo mode</strong> — no sidecar connected. Showing a sample scan of api.example.com.
+            </span>
+          </div>
+        )}
         {error && (
           <div className="mb-4 rounded-lg border border-rose-800/40 bg-rose-950/20 px-4 py-3 text-sm text-rose-400">
             {error}
@@ -397,9 +414,9 @@ export function SecurityWorkspacePanel({ collections, onToast, onSendToRequest }
                     : `${result.findings.length} ${result.findings.length !== 1 ? t("security.findings") : t("security.finding")} detected`}
                 </div>
                 <div className="flex flex-wrap gap-1.5 mt-2">
-                  {result.scan_types_run.map((t) => (
-                    <span key={t} className="rounded border border-white/[0.06] bg-neutral-800/50 px-1.5 py-0.5 text-[10px] text-neutral-400">
-                      {t.replace("_", " ")}
+                  {result.scan_types_run.map((scanType) => (
+                    <span key={scanType} className="rounded border border-white/[0.06] bg-neutral-800/50 px-1.5 py-0.5 text-[10px] text-neutral-400">
+                      {scanType.replace("_", " ")}
                     </span>
                   ))}
                 </div>
@@ -409,21 +426,17 @@ export function SecurityWorkspacePanel({ collections, onToast, onSendToRequest }
               </div>
             </div>
 
-            {/* Findings list */}
+            {/* Severity breakdown summary bar */}
+            {result.findings.length > 0 && (
+              <SeverityBreakdown findings={result.findings as OWASPFinding[]} />
+            )}
+
+            {/* Findings grouped by severity */}
             {sortedFindings.length > 0 && (
-              <div className="space-y-2">
-                {sortedFindings.map((f, i) => (
-                  <FindingCard
-                    key={i}
-                    finding={f as OWASPFinding}
-                    onSendToRequest={
-                      onSendToRequest
-                        ? () => onSendToRequest("GET", url, {}, null)
-                        : undefined
-                    }
-                  />
-                ))}
-              </div>
+              <GroupedFindings
+                findings={sortedFindings as OWASPFinding[]}
+                onSendToRequest={onSendToRequest ? () => onSendToRequest("GET", url, {}, null) : undefined}
+              />
             )}
 
             {result.findings.length === 0 && (
@@ -442,6 +455,105 @@ export function SecurityWorkspacePanel({ collections, onToast, onSendToRequest }
         onClose={() => setInterceptOpen(false)}
         onSendToRequest={onSendToRequest}
       />
+    </div>
+  );
+}
+
+/** Severity count bar with emerald accent on the low/info end. */
+function SeverityBreakdown({ findings }: { findings: OWASPFinding[] }) {
+  const counts: Record<SeverityLevel, number> = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
+  for (const f of findings) counts[f.severity as SeverityLevel]++;
+  const total = findings.length;
+  const bars: { sev: SeverityLevel; color: string; bg: string }[] = [
+    { sev: "critical", color: "bg-rose-500", bg: "text-rose-400" },
+    { sev: "high",     color: "bg-orange-500", bg: "text-orange-400" },
+    { sev: "medium",   color: "bg-amber-500", bg: "text-amber-400" },
+    { sev: "low",      color: "bg-emerald-500", bg: "text-emerald-400" },
+    { sev: "info",     color: "bg-neutral-600", bg: "text-neutral-400" },
+  ];
+  return (
+    <div className="rounded-lg border border-white/[0.06] bg-neutral-900/40 p-3">
+      <div className="mb-2 text-[10px] uppercase tracking-widest text-neutral-500">Severity breakdown</div>
+      {/* Stacked bar */}
+      <div className="flex h-3 overflow-hidden rounded-full gap-px mb-3">
+        {bars.map(({ sev, color }) =>
+          counts[sev] > 0 ? (
+            <div
+              key={sev}
+              className={`${color} first:rounded-l-full last:rounded-r-full`}
+              style={{ width: `${(counts[sev] / total) * 100}%` }}
+              title={`${sev}: ${counts[sev]}`}
+            />
+          ) : null
+        )}
+      </div>
+      {/* Legend */}
+      <div className="flex flex-wrap gap-x-4 gap-y-1">
+        {bars.map(({ sev, bg }) =>
+          counts[sev] > 0 ? (
+            <span key={sev} className={`flex items-center gap-1.5 text-[10px] ${bg}`}>
+              <span className="font-bold tabular-nums text-xs">{counts[sev]}</span>
+              <span className="capitalize">{sev}</span>
+            </span>
+          ) : null
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Findings list grouped by severity with collapsible sections. */
+function GroupedFindings({ findings, onSendToRequest }: { findings: OWASPFinding[]; onSendToRequest?: () => void }) {
+  const sevOrder: SeverityLevel[] = ["critical", "high", "medium", "low", "info"];
+  const groups = sevOrder
+    .map((sev) => ({ sev, items: findings.filter((f) => f.severity === sev) }))
+    .filter((g) => g.items.length > 0);
+
+  const severityLabel: Record<SeverityLevel, string> = {
+    critical: "Critical",
+    high: "High",
+    medium: "Medium",
+    low: "Low",
+    info: "Info",
+  };
+
+  return (
+    <div className="space-y-3">
+      {groups.map(({ sev, items }) => (
+        <SeverityGroup key={sev} sev={sev} label={severityLabel[sev]} items={items} onSendToRequest={onSendToRequest} />
+      ))}
+    </div>
+  );
+}
+
+function SeverityGroup({ sev, label, items, onSendToRequest }: { sev: SeverityLevel; label: string; items: OWASPFinding[]; onSendToRequest?: () => void }) {
+  const [open, setOpen] = useState(true);
+  const headerColors: Record<SeverityLevel, string> = {
+    critical: "text-rose-400 border-rose-800/30 bg-rose-950/20",
+    high: "text-orange-400 border-orange-800/30 bg-orange-950/20",
+    medium: "text-amber-400 border-amber-800/30 bg-amber-950/20",
+    low: "text-emerald-400 border-emerald-800/30 bg-emerald-950/10",
+    info: "text-neutral-400 border-neutral-800/30 bg-neutral-900/40",
+  };
+  return (
+    <div className="rounded-lg border border-white/[0.06] overflow-hidden">
+      <button
+        type="button"
+        className={`flex w-full items-center gap-3 px-3 py-2 text-left border-b border-white/[0.06] ${headerColors[sev]}`}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <SeverityIcon severity={sev} />
+        <span className="text-xs font-semibold">{label}</span>
+        <span className="ml-1 rounded-full bg-black/20 px-1.5 py-0.5 text-[10px] font-bold">{items.length}</span>
+        <span className="ml-auto text-[10px] opacity-60">{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div className="divide-y divide-white/[0.04]">
+          {items.map((f, i) => (
+            <FindingCard key={i} finding={f} onSendToRequest={onSendToRequest} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

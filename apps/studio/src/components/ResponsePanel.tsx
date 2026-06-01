@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, ArrowDown, ArrowUp, Bot, Braces, CheckCircle2, ChevronDown, Clock, Code2, Copy, Database, Download, FileCode, FolderPlus, GitCompare, Globe, Inbox, Minus, MoreHorizontal, Network, Radio, RefreshCw, Search, Server, Shield, Star, Terminal, Upload, Wifi, XCircle, Zap } from "lucide-react";
 import type { Assertion } from "../state/types";
 import type { AutoCompareOutput, BodySearchMatch, ExecuteResponse, HeaderInsightsOutput, SchemaValidateOutput, TimingBreakdown } from "../lib/sidecar";
-import { sidecar } from "../lib/sidecar";
+import { sidecar, isTauri } from "../lib/sidecar";
+import { DEMO_RESPONSE } from "../lib/demoData";
 import { CodeEditor } from "./CodeEditor";
 import { JsonTreeView } from "./JsonTreeView";
 import { RateLimitIndicator } from "./RateLimitIndicator";
@@ -202,15 +203,29 @@ export function ResponsePanel({ busy, response, error, onDiff, onCodegen, consol
 
   if (busy && !response) return <Loading />;
   if (error && !response) return <ErrorView error={error} />;
-  if (!response && isFirstRun) return <WelcomeScreen onImportCollection={onImportCollection} onOpenSwagger={onOpenSwagger} onOpenAgentExplorer={onOpenAgentExplorer} onNewCollection={onNewCollection} onOpenGraphQL={onOpenGraphQL} onOpenSoap={onOpenSoap} onOpenGrpc={onOpenGrpc} onOpenWebSocket={onOpenWebSocket} onOpenSse={onOpenSse} onOpenKafka={onOpenKafka} />;
-  if (!response) return <Empty />;
 
-  const displayResponse = viewingHistorical ?? response;
-  const history = getUrlHistory(response.final_url);
+  // Browser-demo: when no Tauri shell is present and no real response exists, use bundled
+  // demo data so the response panel renders rich content for marketing screenshots.
+  // This takes precedence over WelcomeScreen / Empty so the panel looks full by default.
+  const demoMode = !response && !isTauri();
+  const effectiveResponse = response ?? (demoMode ? DEMO_RESPONSE : null);
+
+  if (!response && !demoMode && isFirstRun) return <WelcomeScreen onImportCollection={onImportCollection} onOpenSwagger={onOpenSwagger} onOpenAgentExplorer={onOpenAgentExplorer} onNewCollection={onNewCollection} onOpenGraphQL={onOpenGraphQL} onOpenSoap={onOpenSoap} onOpenGrpc={onOpenGrpc} onOpenWebSocket={onOpenWebSocket} onOpenSse={onOpenSse} onOpenKafka={onOpenKafka} />;
+
+  if (!effectiveResponse) return <Empty />;
+
+  const displayResponse = viewingHistorical ?? effectiveResponse;
+  const history = getUrlHistory(effectiveResponse.final_url);
 
   return (
     <div ref={panelRef} className="flex h-full min-h-0 flex-col">
       <StatusRow res={displayResponse} onDiff={onDiff} onCodegen={onCodegen} history={history} onViewHistorical={(snap) => setViewingHistorical(snap.response)} onAddAssertion={onAddAssertion} />
+      {demoMode && (
+        <div className="flex items-center gap-2 border-b border-emerald-800/30 bg-emerald-950/20 px-3 py-1 text-[11px] text-emerald-400">
+          <Zap className="h-3 w-3 shrink-0" />
+          <span><strong>Demo mode</strong> — bundled sample response from api.example.com/v1/me. Connect the sidecar to run real requests.</span>
+        </div>
+      )}
       {viewingHistorical && (
         <div className="flex items-center gap-2 border-b border-amber-800/30 bg-amber-950/20 px-3 py-1 text-[11px] text-amber-400">
           <Clock className="h-3 w-3" />

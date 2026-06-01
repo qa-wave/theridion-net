@@ -7,8 +7,9 @@
  */
 import { Activity, BarChart3, ChevronDown, ChevronRight, Clock, Loader2, Play, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { sidecar, type LoadRunResult, type SavedLoadResult, type StoredCollection } from "../lib/sidecar";
+import { sidecar, isTauri, type LoadRunResult, type SavedLoadResult, type StoredCollection } from "../lib/sidecar";
 import { useT } from "../lib/i18n/context";
+import { DEMO_LOAD_RESULT } from "../lib/demoData";
 
 interface Props {
   collections: StoredCollection[];
@@ -59,41 +60,203 @@ function MetricCard({
 function Timeline({ result }: { result: LoadRunResult }) {
   const t = useT();
   if (!result.timeline || result.timeline.length === 0) return null;
-  const maxRps = Math.max(...result.timeline.map((pt) => pt.rps), 1);
-  const maxLat = Math.max(...result.timeline.map((pt) => pt.avg_latency_ms), 1);
+  const pts = result.timeline;
+  const maxRps = Math.max(...pts.map((pt) => pt.rps), 1);
+  const maxLat = Math.max(...pts.map((pt) => pt.avg_latency_ms), 1);
+  const n = pts.length;
+
+  // SVG polyline for the latency curve (viewBox 0 0 100 100)
+  const latencyPoints = pts
+    .map((pt, i) => {
+      const x = (i / (n - 1)) * 100;
+      const y = 100 - (pt.avg_latency_ms / maxLat) * 90; // 10px top padding
+      return `${x.toFixed(2)},${y.toFixed(2)}`;
+    })
+    .join(" ");
+
+  // Fill area under the latency curve
+  const first = pts[0];
+  const firstX = 0;
+  const firstY = 100 - (first.avg_latency_ms / maxLat) * 90;
+  const lastX = 100;
+  const fillPath = `M ${firstX} ${firstY} L ${latencyPoints.replace(/(\d+\.\d+),(\d+\.\d+)/g, "$1 $2").split(" ").slice(1).join(" L ")} L ${lastX} 100 L ${firstX} 100 Z`;
+
   return (
     <div className="rounded-lg border border-white/[0.06] bg-neutral-900/40 p-3">
       <div className="mb-2 text-[10px] uppercase tracking-widest text-neutral-500">{t("load.timeline")}</div>
-      <div className="relative h-24 flex items-end gap-px overflow-hidden">
-        {result.timeline.map((point, i) => {
-          const rpsH = (point.rps / maxRps) * 100;
-          const latH = (point.avg_latency_ms / maxLat) * 100;
-          const hasError = point.error_count > 0;
-          return (
-            <div
-              key={i}
-              className="group relative flex-1 min-w-[2px] flex flex-col-reverse gap-px"
-              title={`t=${point.second}s | RPS=${point.rps.toFixed(1)} | lat=${point.avg_latency_ms.toFixed(0)}ms | err=${point.error_count}`}
-            >
-              {/* RPS bar */}
+      <div className="relative h-28 overflow-hidden">
+        {/* RPS bar chart */}
+        <div className="absolute inset-0 flex items-end gap-px">
+          {pts.map((point, i) => {
+            const rpsH = (point.rps / maxRps) * 100;
+            const hasError = point.error_count > 0;
+            return (
               <div
-                className={`w-full rounded-t-sm ${hasError ? "bg-rose-500/70" : "bg-orange-500/60"}`}
-                style={{ height: `${rpsH}%` }}
+                key={i}
+                className="group relative flex-1 min-w-[2px] flex flex-col-reverse"
+                title={`t=${point.second}s | RPS=${point.rps.toFixed(1)} | lat=${point.avg_latency_ms.toFixed(0)}ms | err=${point.error_count}`}
+              >
+                <div
+                  className={`w-full rounded-t-[1px] ${hasError ? "bg-rose-500/70" : "bg-emerald-500/25"}`}
+                  style={{ height: `${rpsH}%` }}
+                />
+              </div>
+            );
+          })}
+        </div>
+        {/* SVG latency polyline overlay */}
+        <svg
+          className="absolute inset-0 h-full w-full overflow-visible pointer-events-none"
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none"
+        >
+          <defs>
+            <linearGradient id="lat-fill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="rgb(16,185,129)" stopOpacity="0.18" />
+              <stop offset="100%" stopColor="rgb(16,185,129)" stopOpacity="0.02" />
+            </linearGradient>
+          </defs>
+          {/* Fill area */}
+          <path d={fillPath} fill="url(#lat-fill)" />
+          {/* Error spike markers */}
+          {pts.map((pt, i) =>
+            pt.error_count > 0 ? (
+              <line
+                key={i}
+                x1={(i / (n - 1)) * 100}
+                y1="0"
+                x2={(i / (n - 1)) * 100}
+                y2="100"
+                stroke="rgb(244,63,94)"
+                strokeWidth="0.5"
+                strokeOpacity="0.6"
+                strokeDasharray="2,2"
               />
-              {/* Latency overlay */}
-              <div
-                className="absolute bottom-0 w-full opacity-30 rounded-t-sm bg-sky-400"
-                style={{ height: `${latH}%` }}
+            ) : null
+          )}
+          {/* Latency curve */}
+          <polyline
+            points={latencyPoints}
+            fill="none"
+            stroke="rgb(52,211,153)"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            vectorEffect="non-scaling-stroke"
+          />
+          {/* Dots on every 5th point */}
+          {pts.filter((_, i) => i % 5 === 0).map((pt, idx) => {
+            const origIdx = idx * 5;
+            const x = (origIdx / (n - 1)) * 100;
+            const y = 100 - (pt.avg_latency_ms / maxLat) * 90;
+            return (
+              <circle
+                key={origIdx}
+                cx={x}
+                cy={y}
+                r="1.2"
+                fill="rgb(52,211,153)"
+                vectorEffect="non-scaling-stroke"
               />
-            </div>
-          );
-        })}
+            );
+          })}
+        </svg>
+      </div>
+      {/* X-axis labels */}
+      <div className="mt-1 flex justify-between text-[9px] text-neutral-700">
+        <span>0s</span>
+        <span>{Math.round(n / 2)}s</span>
+        <span>{n}s</span>
       </div>
       <div className="mt-1 flex gap-3 text-[9px] text-neutral-600">
-        <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-orange-500/60" />{t("load.timeline.rps")}</span>
-        <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-sky-400/30" />{t("load.timeline.avgLatency")}</span>
+        <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-emerald-500/30" />{t("load.timeline.rps")}</span>
+        <span className="flex items-center gap-1"><span className="inline-block h-[1px] w-4 bg-emerald-400" />{t("load.timeline.avgLatency")}</span>
         <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-rose-500/70" />{t("load.timeline.errors")}</span>
       </div>
+    </div>
+  );
+}
+
+/** Derive a ramp/stages summary from the timeline. */
+function StagesSummary({ result }: { result: LoadRunResult }) {
+  const pts = result.timeline;
+  if (pts.length < 6) return null;
+  const n = pts.length;
+  const rampEnd = Math.round(n * 0.33);
+  const sustainEnd = Math.round(n * 0.83);
+  const rampPts = pts.slice(0, rampEnd);
+  const sustainPts = pts.slice(rampEnd, sustainEnd);
+  const drainPts = pts.slice(sustainEnd);
+
+  function avg(arr: typeof pts, key: keyof typeof pts[0]): number {
+    if (!arr.length) return 0;
+    return arr.reduce((s, p) => s + (p[key] as number), 0) / arr.length;
+  }
+
+  const stages = [
+    { name: "Ramp-Up", duration: `${rampEnd}s`, rps: avg(rampPts, "rps"), lat: avg(rampPts, "avg_latency_ms"), color: "text-emerald-400 border-emerald-500/20 bg-emerald-950/20" },
+    { name: "Sustain", duration: `${sustainEnd - rampEnd}s`, rps: avg(sustainPts, "rps"), lat: avg(sustainPts, "avg_latency_ms"), color: "text-emerald-300 border-emerald-500/30 bg-emerald-950/30" },
+    { name: "Drain", duration: `${n - sustainEnd}s`, rps: avg(drainPts, "rps"), lat: avg(drainPts, "avg_latency_ms"), color: "text-neutral-400 border-white/[0.06] bg-neutral-900/40" },
+  ];
+
+  return (
+    <div className="rounded-lg border border-white/[0.06] bg-neutral-900/40 p-3">
+      <div className="mb-2 text-[10px] uppercase tracking-widest text-neutral-500">Stages</div>
+      <div className="grid grid-cols-3 gap-2">
+        {stages.map((s) => (
+          <div key={s.name} className={`rounded border px-3 py-2 ${s.color}`}>
+            <div className="text-[10px] font-semibold uppercase tracking-widest mb-1">{s.name}</div>
+            <div className="text-[9px] text-neutral-500">{s.duration}</div>
+            <div className="mt-1.5 text-xs font-bold tabular-nums">{s.rps.toFixed(1)} RPS</div>
+            <div className="text-[10px] text-neutral-500">{s.lat.toFixed(0)} ms avg</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Per-second results table (first 10 rows). */
+function ResultsTable({ result }: { result: LoadRunResult }) {
+  const [expanded, setExpanded] = useState(false);
+  const pts = result.timeline;
+  const visible = expanded ? pts : pts.slice(0, 10);
+  return (
+    <div className="rounded-lg border border-white/[0.06] bg-neutral-900/40 overflow-hidden">
+      <div className="px-3 py-2 text-[10px] uppercase tracking-widest text-neutral-500">Per-second breakdown</div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-t border-white/[0.04] text-[9px] uppercase tracking-wider text-neutral-600">
+              <th className="px-3 py-1.5 text-left">t (s)</th>
+              <th className="px-3 py-1.5 text-right">RPS</th>
+              <th className="px-3 py-1.5 text-right">Avg lat</th>
+              <th className="px-3 py-1.5 text-right">VUs</th>
+              <th className="px-3 py-1.5 text-right">Errors</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visible.map((pt, i) => (
+              <tr key={i} className="border-t border-white/[0.04] hover:bg-white/[0.02]">
+                <td className="px-3 py-1 font-mono text-neutral-500">{pt.second}</td>
+                <td className="px-3 py-1 text-right font-mono text-emerald-400">{pt.rps.toFixed(1)}</td>
+                <td className={`px-3 py-1 text-right font-mono ${pt.avg_latency_ms > 200 ? "text-amber-400" : "text-neutral-300"}`}>{pt.avg_latency_ms.toFixed(0)} ms</td>
+                <td className="px-3 py-1 text-right font-mono text-neutral-500">{pt.active_users}</td>
+                <td className={`px-3 py-1 text-right font-mono ${pt.error_count > 0 ? "text-rose-400" : "text-neutral-700"}`}>{pt.error_count}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {pts.length > 10 && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="w-full py-1.5 text-center text-[10px] text-neutral-500 hover:text-neutral-300 transition border-t border-white/[0.04]"
+        >
+          {expanded ? "Show less" : `Show all ${pts.length} rows`}
+        </button>
+      )}
     </div>
   );
 }
@@ -108,15 +271,23 @@ export function LoadWorkspacePanel({ collections, onToast }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [selectedCollection, setSelectedCollection] = useState<string>("");
+  const [isDemoMode, setIsDemoMode] = useState(false);
 
   // Load saved results on mount so the panel is populated immediately.
+  // In browser-demo mode (no Tauri, sidecar unreachable) inject bundled demo data.
   useEffect(() => {
     sidecar.listSavedLoadResults().then((results) => {
       setSavedResults(results);
       if (results.length > 0 && !result) {
         setSelectedSaved(results[0]);
       }
-    }).catch(() => { /* sidecar not ready yet */ });
+    }).catch(() => {
+      if (!isTauri()) {
+        // Browser-demo: show the bundled demo result directly.
+        setResult(DEMO_LOAD_RESULT);
+        setIsDemoMode(true);
+      }
+    });
   }, []);
 
   // Flatten collection requests for the URL picker
@@ -394,12 +565,21 @@ export function LoadWorkspacePanel({ collections, onToast }: Props) {
           </div>
         )}
 
+        {isDemoMode && result && (
+          <div className="mb-4 flex items-center gap-2 rounded-lg border border-emerald-800/30 bg-emerald-950/20 px-3 py-2 text-xs text-emerald-400">
+            <Activity className="h-3.5 w-3.5 shrink-0" />
+            <span>
+              <strong>Demo mode</strong> — no sidecar connected. Showing a bundled sample run (30 VUs × 30 s against api.example.com).
+            </span>
+          </div>
+        )}
+
         {result && (
           <div className="space-y-4">
             {/* Summary grid */}
             <div className="grid grid-cols-4 gap-3">
               <MetricCard label={t("load.metric.totalRequests")} value={result.total_requests.toLocaleString()} />
-              <MetricCard label={t("load.metric.rps")} value={result.requests_per_second.toFixed(1)} accent="text-orange-400" />
+              <MetricCard label={t("load.metric.rps")} value={result.requests_per_second.toFixed(1)} accent="text-emerald-400" />
               <MetricCard label={t("load.metric.successful")} value={result.successful.toLocaleString()} accent="text-emerald-400" />
               <MetricCard
                 label={t("load.metric.failed")}
@@ -419,8 +599,14 @@ export function LoadWorkspacePanel({ collections, onToast }: Props) {
               <MetricCard label={t("load.metric.duration")} value={`${result.duration_seconds.toFixed(1)}s`} />
             </div>
 
-            {/* Timeline */}
+            {/* Timeline with SVG latency curve */}
             <Timeline result={result} />
+
+            {/* Stage summary */}
+            <StagesSummary result={result} />
+
+            {/* Per-second results table */}
+            <ResultsTable result={result} />
 
             {/* Errors */}
             {Object.keys(result.errors).length > 0 && (
