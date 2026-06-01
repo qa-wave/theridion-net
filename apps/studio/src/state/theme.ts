@@ -1,5 +1,5 @@
 export type ThemeId =
-  | "cobweb" | "violet" | "amber" | "arctic"
+  | "emerald" | "cobweb" | "violet" | "amber" | "arctic"
   | "noir" | "neon" | "frosted" | "brutalist" | "warm" | "metal";
 
 export interface ThemeDef {
@@ -11,6 +11,7 @@ export interface ThemeDef {
 
 export const THEMES: ThemeDef[] = [
   // Color themes
+  { id: "emerald", label: "Emerald", dot: "bg-emerald-400", group: "color" },
   { id: "cobweb", label: "Cobweb Teal", dot: "bg-cyan-400", group: "color" },
   { id: "violet", label: "Violet Haze", dot: "bg-violet-400", group: "color" },
   { id: "amber", label: "Amber Forge", dot: "bg-amber-400", group: "color" },
@@ -29,7 +30,7 @@ const STORAGE_KEY = "theridion.theme";
 export function loadTheme(): ThemeId {
   const stored = localStorage.getItem(STORAGE_KEY);
   if (stored && THEMES.some((t) => t.id === stored)) return stored as ThemeId;
-  return "cobweb";
+  return "emerald";
 }
 
 export function applyTheme(id: ThemeId): void {
