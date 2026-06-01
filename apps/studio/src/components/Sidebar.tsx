@@ -26,6 +26,8 @@ import type { CollectionItem, StoredCollection, FavoriteItem } from "../lib/side
 import { sidecar } from "../lib/sidecar";
 import { Tooltip } from "./Tooltip";
 import { TagPills, TagFilterBar } from "./TagManager";
+import { useT } from "../lib/i18n/context";
+import { LangSwitcher } from "./LangSwitcher";
 
 /** Stored in localStorage per request: last run result for hover preview. */
 interface LastResponseInfo {
@@ -117,6 +119,7 @@ export function Sidebar({
   onInlineNewCancel,
   onFileImport,
 }: Props) {
+  const t = useT();
   const [query, setQuery] = useState("");
   const filter = query.toLowerCase();
   const [fileDragOver, setFileDragOver] = useState(false);
@@ -181,7 +184,7 @@ export function Sidebar({
           type="button"
           onClick={onToggleCollapse}
           className="mb-3 flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition hover:bg-neutral-800 hover:text-neutral-200"
-          title="Expand sidebar"
+          title={t("sidebar.expand")}
         >
           <ChevronRight className="h-4 w-4" />
         </button>
@@ -219,12 +222,13 @@ export function Sidebar({
       {/* File drag overlay */}
       {fileDragOver && (
         <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center rounded-lg border-2 border-dashed border-sky-500/60 bg-sky-500/10 backdrop-blur-sm">
-          <p className="text-sm font-medium text-sky-300">Drop to import collection</p>
+          <p className="text-sm font-medium text-sky-300">{t("sidebar.dropImport")}</p>
         </div>
       )}
       {/* Branding header */}
-      <div className="px-4 pt-4 pb-2">
-        <h1 className="brand-gradient text-sm font-bold tracking-widest uppercase">Theridion</h1>
+      <div className="px-4 pt-4 pb-2 flex items-center justify-between">
+        <h1 className="brand-gradient text-sm font-bold tracking-widest uppercase">{t("sidebar.branding")}</h1>
+        <LangSwitcher />
       </div>
 
       {/* Favorites section */}
@@ -235,7 +239,7 @@ export function Sidebar({
               {favOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
             </button>
             <Star className="h-3 w-3 text-amber-500" />
-            <span className="text-[10px] font-semibold uppercase tracking-widest text-neutral-500">Favorites</span>
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-neutral-500">{t("sidebar.favorites")}</span>
             <span className="ml-auto text-[10px] text-neutral-600">{favorites.length}</span>
           </div>
           {favOpen && (
@@ -261,9 +265,9 @@ export function Sidebar({
 
       <div className="flex items-center gap-1 px-3 pt-3 pb-2">
         <span className="text-[10px] font-semibold uppercase tracking-widest text-neutral-500">
-          Collections
+          {t("sidebar.collections")}
         </span>
-        <Tooltip content="Refresh" side="bottom">
+        <Tooltip content={t("sidebar.refresh")} side="bottom">
           <button
             type="button"
             onClick={onRefresh}
@@ -276,7 +280,7 @@ export function Sidebar({
             )}
           </button>
         </Tooltip>
-        <Tooltip content="Generate tests" shortcut="OpenAPI / WSDL" side="bottom">
+        <Tooltip content={t("sidebar.generateTests")} shortcut={t("sidebar.generateTests.shortcut")} side="bottom">
           <button
             type="button"
             onClick={onGenerateTests}
@@ -285,7 +289,7 @@ export function Sidebar({
             <Sparkles className="h-3.5 w-3.5" />
           </button>
         </Tooltip>
-        <Tooltip content="New collection" side="bottom">
+        <Tooltip content={t("sidebar.newCollection")} side="bottom">
           <button
             type="button"
             onClick={onNewCollection}
@@ -295,7 +299,7 @@ export function Sidebar({
           </button>
         </Tooltip>
         {onImport && (
-          <Tooltip content="Import collection" side="bottom">
+          <Tooltip content={t("sidebar.importCollection")} side="bottom">
             <button
               type="button"
               onClick={onImport}
@@ -314,7 +318,7 @@ export function Sidebar({
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Filter…"
+            placeholder={t("sidebar.filter.placeholder")}
             className="w-full rounded-md border border-glass bg-neutral-900/50 py-1.5 pl-7 pr-2 text-xs placeholder-neutral-600 focus:border-cobweb-500/40 focus:outline-none"
           />
         </div>
@@ -332,7 +336,7 @@ export function Sidebar({
         {inlineNewName?.type === "collection" && onInlineNewCommit && onInlineNewCancel && (
           <div className="px-2 py-1">
             <InlineRenameInput
-              initial="New collection"
+              initial={t("sidebar.inlineNew.collection")}
               onCommit={onInlineNewCommit}
               onCancel={onInlineNewCancel}
             />
@@ -394,10 +398,10 @@ export function Sidebar({
           type="button"
           onClick={onToggleCollapse}
           className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-neutral-500 transition hover:bg-neutral-800 hover:text-neutral-200"
-          title="Collapse sidebar"
+          title={t("sidebar.collapse")}
         >
           <ChevronLeft className="h-4 w-4" />
-          <span>Collapse</span>
+          <span>{t("sidebar.collapse")}</span>
         </button>
         <button
           type="button"
@@ -406,9 +410,9 @@ export function Sidebar({
             window.dispatchEvent(new KeyboardEvent("keydown", { key: "?", bubbles: true }));
           }}
           className="mt-1 flex w-full items-center justify-center rounded-lg px-2 py-1 text-[10px] text-neutral-600 transition hover:bg-neutral-800 hover:text-neutral-400"
-          title="Keyboard shortcuts"
+          title={t("sidebar.shortcuts")}
         >
-          Shortcuts &#x2318;?
+          {t("sidebar.shortcuts")} &#x2318;?
         </button>
       </div>
     </aside>
@@ -463,17 +467,18 @@ function CollapsedCollectionNode({
 }
 
 function EmptyState({ onNewCollection }: { onNewCollection: () => void }) {
+  const t = useT();
   return (
     <div className="mx-2 mt-6 rounded-xl border border-dashed border-neutral-800/60 bg-neutral-900/20 px-5 py-10 text-center">
       <div className="mx-auto mb-4 w-fit rounded-2xl bg-neutral-800/30 p-5">
         <FolderClosed className="h-8 w-8 text-neutral-600" />
       </div>
-      <p className="text-sm font-medium text-neutral-300">No collections yet</p>
+      <p className="text-sm font-medium text-neutral-300">{t("sidebar.empty.title")}</p>
       <p className="mx-auto mt-2 max-w-[200px] text-xs leading-relaxed text-neutral-600">
-        Create your first collection to organize and save API requests.
+        {t("sidebar.empty.description")}
       </p>
       <p className="mt-3 text-[11px] text-neutral-600">
-        Or save a request with{" "}
+        {t("sidebar.empty.saveHint")}{" "}
         <kbd className="rounded-md border border-neutral-800 bg-neutral-900/80 px-1.5 py-0.5 font-mono text-[10px] shadow-inner-glow">
           &#x2318;S
         </kbd>
@@ -483,7 +488,7 @@ function EmptyState({ onNewCollection }: { onNewCollection: () => void }) {
         onClick={onNewCollection}
         className="mt-4 rounded-lg bg-accent-gradient px-4 py-2 text-xs font-semibold text-white shadow-glow-sm transition hover:shadow-glow"
       >
-        + New collection
+        {t("sidebar.empty.newButton")}
       </button>
     </div>
   );
@@ -588,6 +593,7 @@ function CollectionNode({
   onInlineNewCancel?: () => void;
   tagFilters?: string[];
 }) {
+  const t = useT();
   const [open, setOpen] = useState(true);
   const [renaming, setRenaming] = useState(false);
   const visibleItems = (filter || tagFilters?.length)
@@ -639,13 +645,13 @@ function CollectionNode({
             healthStatus === "green" ? "bg-emerald-500" :
             healthStatus === "amber" ? "bg-amber-500" :
             "bg-rose-500"
-          }`} title={`Last run: ${healthStatus === "green" ? "all passed" : healthStatus === "amber" ? "some failures" : "errors"}`} />
+          }`} title={`Last run: ${healthStatus === "green" ? t("sidebar.collection.health.allPassed") : healthStatus === "amber" ? t("sidebar.collection.health.someFailures") : t("sidebar.collection.health.errors")}`} />
         )}
         <button
           type="button"
           onClick={() => setRenaming(true)}
           className="rounded p-0.5 text-neutral-600 opacity-0 transition-opacity duration-150 hover:bg-neutral-800 hover:text-neutral-200 group-hover:opacity-100"
-          title="Rename"
+          title={t("sidebar.collection.rename")}
         >
           <Pencil className="h-3 w-3" />
         </button>
@@ -653,7 +659,7 @@ function CollectionNode({
           type="button"
           onClick={() => onNewFolder(null)}
           className="rounded p-0.5 text-neutral-600 opacity-0 transition-opacity duration-150 hover:bg-neutral-800 hover:text-neutral-200 group-hover:opacity-100"
-          title="New folder at root"
+          title={t("sidebar.folder.newAtRoot")}
         >
           <FolderPlus className="h-3 w-3" />
         </button>
@@ -662,7 +668,7 @@ function CollectionNode({
             type="button"
             onClick={onRunCollection}
             className="rounded p-0.5 text-neutral-600 opacity-0 transition-opacity duration-150 hover:bg-neutral-800 hover:text-emerald-400 group-hover:opacity-100"
-            title="Run collection"
+            title={t("sidebar.collection.run")}
           >
             <Play className="h-3 w-3" />
           </button>
@@ -672,7 +678,7 @@ function CollectionNode({
             type="button"
             onClick={onExportCurl}
             className="rounded p-0.5 text-neutral-600 opacity-0 transition-opacity duration-150 hover:bg-neutral-800 hover:text-neutral-200 group-hover:opacity-100"
-            title="Export as cURL"
+            title={t("sidebar.collection.exportCurl")}
           >
             <Terminal className="h-3 w-3" />
           </button>
@@ -682,7 +688,7 @@ function CollectionNode({
             type="button"
             onClick={onExportPostman}
             className="rounded p-0.5 text-neutral-600 opacity-0 transition-opacity duration-150 hover:bg-neutral-800 hover:text-amber-400 group-hover:opacity-100"
-            title="Export as Postman"
+            title={t("sidebar.collection.exportPostman")}
           >
             <Download className="h-3 w-3" />
           </button>
@@ -692,7 +698,7 @@ function CollectionNode({
             type="button"
             onClick={onViewStats}
             className="rounded p-0.5 text-neutral-600 opacity-0 transition-opacity duration-150 hover:bg-neutral-800 hover:text-violet-400 group-hover:opacity-100"
-            title="View Statistics"
+            title={t("sidebar.collection.viewStats")}
           >
             <BarChart3 className="h-3 w-3" />
           </button>
@@ -702,7 +708,7 @@ function CollectionNode({
             type="button"
             onClick={onGenerateDocs}
             className="rounded p-0.5 text-neutral-600 opacity-0 transition-opacity duration-150 hover:bg-neutral-800 hover:text-cobweb-400 group-hover:opacity-100"
-            title="Generate Docs"
+            title={t("sidebar.collection.generateDocs")}
           >
             <FileText className="h-3 w-3" />
           </button>
@@ -711,7 +717,7 @@ function CollectionNode({
           type="button"
           onClick={() => onDeleteCollection()}
           className="rounded p-0.5 text-neutral-600 opacity-0 transition-opacity duration-150 hover:bg-neutral-800 hover:text-rose-400 group-hover:opacity-100"
-          title="Delete collection"
+          title={t("sidebar.collection.delete")}
         >
           <Trash2 className="h-3 w-3" />
         </button>
@@ -721,7 +727,7 @@ function CollectionNode({
         {inlineNewFolder && !inlineNewFolder.parentId && onInlineNewCommit && onInlineNewCancel && (
           <div className="py-0.5" style={{ paddingLeft: "1.25rem" }}>
             <InlineRenameInput
-              initial="New folder"
+              initial={t("sidebar.inlineNew.folder")}
               onCommit={onInlineNewCommit}
               onCancel={onInlineNewCancel}
             />
@@ -909,6 +915,7 @@ function FolderNode({
   onDropBefore?: () => void;
   lastResponses?: Map<string, LastResponseInfo>;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(true);
   const [renaming, setRenaming] = useState(false);
   const [folderHighlight, setFolderHighlight] = useState(false);
@@ -973,7 +980,7 @@ function FolderNode({
           type="button"
           onClick={() => setRenaming(true)}
           className="rounded p-0.5 text-neutral-600 opacity-0 transition hover:bg-neutral-800 hover:text-neutral-200 group-hover:opacity-100"
-          title="Rename"
+          title={t("sidebar.folder.rename")}
         >
           <Pencil className="h-3 w-3" />
         </button>
@@ -981,7 +988,7 @@ function FolderNode({
           type="button"
           onClick={() => onNewFolder(folder.id)}
           className="rounded p-0.5 text-neutral-600 opacity-0 transition hover:bg-neutral-800 hover:text-neutral-200 group-hover:opacity-100"
-          title="New subfolder"
+          title={t("sidebar.folder.newSubfolder")}
         >
           <FolderPlus className="h-3 w-3" />
         </button>
@@ -989,7 +996,7 @@ function FolderNode({
           type="button"
           onClick={() => onDeleteFolder(folder.id)}
           className="mr-1 rounded p-0.5 text-neutral-600 opacity-0 transition-opacity duration-150 hover:bg-neutral-800 hover:text-rose-400 group-hover:opacity-100"
-          title="Delete folder"
+          title={t("sidebar.folder.delete")}
         >
           <Trash2 className="h-3 w-3" />
         </button>
@@ -1065,6 +1072,7 @@ function RequestRow({
     DELETE: "border-l-rose-500", HEAD: "border-l-neutral-500",
     OPTIONS: "border-l-neutral-500",
   };
+  const t = useT();
   const [renaming, setRenaming] = useState(false);
   const [hovering, setHovering] = useState(false);
   const hoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1151,7 +1159,7 @@ function RequestRow({
               ? "text-amber-500"
               : "text-neutral-600 opacity-0 hover:text-amber-400 group-hover:opacity-100"
           } hover:bg-neutral-800`}
-          title={isFavorite ? "Remove from favorites" : "Add to favorites"}
+          title={isFavorite ? t("sidebar.request.removeFavorite") : t("sidebar.request.addFavorite")}
         >
           <Star className={`h-3 w-3 ${isFavorite ? "fill-amber-500" : ""}`} />
         </button>
@@ -1160,7 +1168,7 @@ function RequestRow({
         type="button"
         onClick={() => setRenaming(true)}
         className="rounded p-0.5 text-neutral-600 opacity-0 transition hover:bg-neutral-800 hover:text-neutral-200 group-hover:opacity-100"
-        title="Rename"
+        title={t("sidebar.request.rename")}
       >
         <Pencil className="h-3 w-3" />
       </button>
@@ -1168,7 +1176,7 @@ function RequestRow({
         type="button"
         onClick={() => onDelete()}
         className="mr-1 rounded p-0.5 text-neutral-600 opacity-0 transition-opacity duration-150 hover:bg-neutral-800 hover:text-rose-400 group-hover:opacity-100"
-        title="Delete request"
+        title={t("sidebar.request.delete")}
       >
         <Trash2 className="h-3 w-3" />
       </button>

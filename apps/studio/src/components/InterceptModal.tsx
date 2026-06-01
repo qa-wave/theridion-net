@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getSidecarBaseUrl } from "../lib/sidecar";
+import { useT } from "../lib/i18n/context";
 
 // ---------------------------------------------------------------------------
 // Types (mirrors sidecar interceptor.py)
@@ -270,6 +271,8 @@ export function InterceptModal({ open, onClose, onSendToRequest }: Props) {
     setEditMode(false);
   }
 
+  const t = useT();
+
   if (!open) return null;
 
   const inputCls = "w-full rounded border border-white/[0.06] bg-neutral-900/50 px-2 py-1 text-xs text-neutral-100 focus:border-red-500/40 focus:outline-none";
@@ -281,14 +284,14 @@ export function InterceptModal({ open, onClose, onSendToRequest }: Props) {
         <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3">
           <div className="flex items-center gap-3">
             <Shield className="h-4 w-4 text-red-500" />
-            <span className="text-sm font-semibold text-neutral-100">Intercepting Proxy</span>
-            <span className={`h-2 w-2 rounded-full ${connected ? "bg-emerald-500" : "bg-neutral-600"}`} title={connected ? "Connected" : "Disconnected"} />
-            <span className="text-[10px] text-neutral-500">{flows.length} flows</span>
+            <span className="text-sm font-semibold text-neutral-100">{t("intercept.title")}</span>
+            <span className={`h-2 w-2 rounded-full ${connected ? "bg-emerald-500" : "bg-neutral-600"}`} title={connected ? t("intercept.connected") : t("intercept.disconnected")} />
+            <span className="text-[10px] text-neutral-500">{t("intercept.flows", { n: flows.length })}</span>
           </div>
           <div className="flex items-center gap-3">
             {/* Enable toggle */}
             <label className="flex cursor-pointer items-center gap-1.5 text-xs text-neutral-400">
-              <span>Intercept</span>
+              <span>{t("intercept.toggle.intercept")}</span>
               <button
                 type="button"
                 role="switch"
@@ -301,7 +304,7 @@ export function InterceptModal({ open, onClose, onSendToRequest }: Props) {
             </label>
             {/* Break-on-all */}
             <label className="flex cursor-pointer items-center gap-1.5 text-xs text-neutral-400">
-              <span>Break all</span>
+              <span>{t("intercept.toggle.breakAll")}</span>
               <button
                 type="button"
                 role="switch"
@@ -314,7 +317,7 @@ export function InterceptModal({ open, onClose, onSendToRequest }: Props) {
             </label>
             {/* Passive scan */}
             <label className="flex cursor-pointer items-center gap-1.5 text-xs text-neutral-400">
-              <span>Auto-scan</span>
+              <span>{t("intercept.toggle.autoScan")}</span>
               <button
                 type="button"
                 role="switch"
@@ -330,7 +333,7 @@ export function InterceptModal({ open, onClose, onSendToRequest }: Props) {
               onClick={clearFlows}
               className="flex items-center gap-1 rounded px-2 py-1 text-[10px] text-neutral-500 hover:bg-neutral-800 hover:text-neutral-300 transition"
             >
-              <Trash2 className="h-3 w-3" /> Clear
+              <Trash2 className="h-3 w-3" /> {t("intercept.clear")}
             </button>
             <button
               type="button"
@@ -349,9 +352,9 @@ export function InterceptModal({ open, onClose, onSendToRequest }: Props) {
               {flows.length === 0 && (
                 <div className="flex flex-col items-center justify-center h-full text-neutral-600 p-4 text-center">
                   <Terminal className="h-8 w-8 mb-2" />
-                  <p className="text-xs">No flows yet.</p>
+                  <p className="text-xs">{t("intercept.empty.title")}</p>
                   {!config.enabled && (
-                    <p className="text-[10px] mt-1">Enable interception to start capturing.</p>
+                    <p className="text-[10px] mt-1">{t("intercept.empty.hint")}</p>
                   )}
                 </div>
               )}
@@ -400,7 +403,7 @@ export function InterceptModal({ open, onClose, onSendToRequest }: Props) {
           <div className="flex flex-1 min-w-0 flex-col overflow-hidden">
             {!selectedFlow ? (
               <div className="flex h-full items-center justify-center text-neutral-600">
-                <p className="text-xs">Select a flow to inspect</p>
+                <p className="text-xs">{t("intercept.selectFlow")}</p>
               </div>
             ) : (
               <div className="flex flex-1 min-h-0 flex-col overflow-y-auto p-4 space-y-4">
@@ -413,14 +416,14 @@ export function InterceptModal({ open, onClose, onSendToRequest }: Props) {
                         onClick={() => releaseBreakpoint(selectedFlow.flow_id)}
                         className="flex items-center gap-1.5 rounded bg-emerald-800/40 px-3 py-1.5 text-xs text-emerald-300 hover:bg-emerald-800/60 transition"
                       >
-                        <Play className="h-3.5 w-3.5" /> Forward
+                        <Play className="h-3.5 w-3.5" /> {t("intercept.forward")}
                       </button>
                       <button
                         type="button"
                         onClick={() => startEdit(selectedFlow)}
                         className="flex items-center gap-1.5 rounded bg-amber-800/40 px-3 py-1.5 text-xs text-amber-300 hover:bg-amber-800/60 transition"
                       >
-                        <Edit3 className="h-3.5 w-3.5" /> Edit &amp; Forward
+                        <Edit3 className="h-3.5 w-3.5" /> {t("intercept.editForward")}
                       </button>
                     </>
                   )}
@@ -431,14 +434,14 @@ export function InterceptModal({ open, onClose, onSendToRequest }: Props) {
                         onClick={() => sendEdit(selectedFlow)}
                         className="flex items-center gap-1.5 rounded bg-emerald-800/40 px-3 py-1.5 text-xs text-emerald-300 hover:bg-emerald-800/60 transition"
                       >
-                        <Send className="h-3.5 w-3.5" /> Send Edited
+                        <Send className="h-3.5 w-3.5" /> {t("intercept.sendEdited")}
                       </button>
                       <button
                         type="button"
                         onClick={() => setEditMode(false)}
                         className="flex items-center gap-1.5 rounded px-3 py-1.5 text-xs text-neutral-400 hover:text-neutral-200 transition"
                       >
-                        <X className="h-3.5 w-3.5" /> Cancel
+                        <X className="h-3.5 w-3.5" /> {t("intercept.cancel")}
                       </button>
                     </>
                   )}
@@ -456,7 +459,7 @@ export function InterceptModal({ open, onClose, onSendToRequest }: Props) {
                       }}
                       className="flex items-center gap-1.5 rounded bg-neutral-800/60 px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-700/60 transition"
                     >
-                      <Terminal className="h-3.5 w-3.5" /> Send to Request
+                      <Terminal className="h-3.5 w-3.5" /> {t("intercept.sendToRequest")}
                     </button>
                   )}
                 </div>
@@ -464,16 +467,16 @@ export function InterceptModal({ open, onClose, onSendToRequest }: Props) {
                 {/* Edit form */}
                 {editMode && (
                   <div className="space-y-2 rounded-lg border border-amber-800/30 bg-amber-950/10 p-3">
-                    <p className="text-[10px] uppercase tracking-widest text-amber-500">Edit request before forwarding</p>
+                    <p className="text-[10px] uppercase tracking-widest text-amber-500">{t("intercept.edit.label")}</p>
                     <div className="grid grid-cols-3 gap-2">
-                      <input className={inputCls} value={editMethod} onChange={(e) => setEditMethod(e.target.value)} placeholder="Method" />
-                      <input className={`${inputCls} col-span-2`} value={editUrl} onChange={(e) => setEditUrl(e.target.value)} placeholder="URL" />
+                      <input className={inputCls} value={editMethod} onChange={(e) => setEditMethod(e.target.value)} placeholder={t("intercept.edit.method")} />
+                      <input className={`${inputCls} col-span-2`} value={editUrl} onChange={(e) => setEditUrl(e.target.value)} placeholder={t("intercept.edit.url")} />
                     </div>
                     <textarea
                       className={`${inputCls} font-mono h-24 resize-none`}
                       value={editBody}
                       onChange={(e) => setEditBody(e.target.value)}
-                      placeholder="Request body (optional)"
+                      placeholder={t("intercept.edit.body")}
                     />
                   </div>
                 )}
@@ -481,7 +484,7 @@ export function InterceptModal({ open, onClose, onSendToRequest }: Props) {
                 {/* Flags */}
                 {selectedFlow.flags.length > 0 && (
                   <div className="space-y-1">
-                    <p className="text-[10px] uppercase tracking-widest text-neutral-500">Passive Scanner Flags</p>
+                    <p className="text-[10px] uppercase tracking-widest text-neutral-500">{t("intercept.flags")}</p>
                     {selectedFlow.flags.map((flag, i) => (
                       <div key={i} className="flex items-start gap-2 rounded border border-white/[0.05] bg-neutral-900/30 px-2 py-1.5">
                         <AlertTriangle className={`h-3.5 w-3.5 shrink-0 mt-0.5 ${flagSeverityColor(flag.severity)}`} />
@@ -495,7 +498,7 @@ export function InterceptModal({ open, onClose, onSendToRequest }: Props) {
                 )}
 
                 {/* Request */}
-                <Section title="Request">
+                <Section title={t("intercept.section.request")}>
                   <div className="font-mono text-xs">
                     <span className={`font-bold ${methodColor(selectedFlow.method)}`}>{selectedFlow.method}</span>
                     {" "}
@@ -511,7 +514,7 @@ export function InterceptModal({ open, onClose, onSendToRequest }: Props) {
 
                 {/* Response */}
                 {selectedFlow.state === "forwarded" && (
-                  <Section title="Response">
+                  <Section title={t("intercept.section.response")}>
                     <div className="flex items-center gap-2 text-xs">
                       <span className={`font-mono font-bold ${
                         (selectedFlow.status_code ?? 0) < 300 ? "text-emerald-400"

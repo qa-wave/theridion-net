@@ -8,6 +8,7 @@
 import { Activity, BarChart3, ChevronDown, ChevronRight, Clock, Loader2, Play, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { sidecar, type LoadRunResult, type SavedLoadResult, type StoredCollection } from "../lib/sidecar";
+import { useT } from "../lib/i18n/context";
 
 interface Props {
   collections: StoredCollection[];
@@ -56,12 +57,13 @@ function MetricCard({
 }
 
 function Timeline({ result }: { result: LoadRunResult }) {
+  const t = useT();
   if (!result.timeline || result.timeline.length === 0) return null;
-  const maxRps = Math.max(...result.timeline.map((t) => t.rps), 1);
-  const maxLat = Math.max(...result.timeline.map((t) => t.avg_latency_ms), 1);
+  const maxRps = Math.max(...result.timeline.map((pt) => pt.rps), 1);
+  const maxLat = Math.max(...result.timeline.map((pt) => pt.avg_latency_ms), 1);
   return (
     <div className="rounded-lg border border-white/[0.06] bg-neutral-900/40 p-3">
-      <div className="mb-2 text-[10px] uppercase tracking-widest text-neutral-500">Timeline</div>
+      <div className="mb-2 text-[10px] uppercase tracking-widest text-neutral-500">{t("load.timeline")}</div>
       <div className="relative h-24 flex items-end gap-px overflow-hidden">
         {result.timeline.map((point, i) => {
           const rpsH = (point.rps / maxRps) * 100;
@@ -88,15 +90,16 @@ function Timeline({ result }: { result: LoadRunResult }) {
         })}
       </div>
       <div className="mt-1 flex gap-3 text-[9px] text-neutral-600">
-        <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-orange-500/60" />RPS</span>
-        <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-sky-400/30" />Avg Latency</span>
-        <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-rose-500/70" />Errors</span>
+        <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-orange-500/60" />{t("load.timeline.rps")}</span>
+        <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-sky-400/30" />{t("load.timeline.avgLatency")}</span>
+        <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-rose-500/70" />{t("load.timeline.errors")}</span>
       </div>
     </div>
   );
 }
 
 export function LoadWorkspacePanel({ collections, onToast }: Props) {
+  const t = useT();
   const [cfg, setCfg] = useState<RunConfig>(DEFAULT_CONFIG);
   const [result, setResult] = useState<LoadRunResult | null>(null);
   const [savedResults, setSavedResults] = useState<SavedLoadResult[]>([]);
@@ -151,11 +154,11 @@ export function LoadWorkspacePanel({ collections, onToast }: Props) {
       setSelectedSaved(null);
       // Refresh saved results list so the history sidebar updates.
       sidecar.listSavedLoadResults().then(setSavedResults).catch(() => {});
-      onToast?.("success", `Load test complete — ${res.total_requests} requests, ${res.requests_per_second.toFixed(1)} RPS`);
+      onToast?.("success", t("load.toast.complete", { requests: res.total_requests, rps: res.requests_per_second.toFixed(1) }));
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
-      onToast?.("error", `Load test failed: ${msg}`);
+      onToast?.("error", t("load.toast.failed", { msg }));
     } finally {
       setBusy(false);
     }
@@ -171,12 +174,12 @@ export function LoadWorkspacePanel({ collections, onToast }: Props) {
         {/* Header */}
         <div className="flex items-center gap-2">
           <Activity className="h-4 w-4 text-orange-500" />
-          <span className="text-sm font-semibold text-neutral-100">Load Test</span>
+          <span className="text-sm font-semibold text-neutral-100">{t("load.header")}</span>
         </div>
 
         {/* URL */}
         <div>
-          <label className={labelCls}>Target URL</label>
+          <label className={labelCls}>{t("load.targetUrl")}</label>
           <input
             type="url"
             className={inputCls}
@@ -190,13 +193,13 @@ export function LoadWorkspacePanel({ collections, onToast }: Props) {
         {/* Pick from collection */}
         {allRequests.length > 0 && (
           <div>
-            <label className={labelCls}>Or use saved request</label>
+            <label className={labelCls}>{t("load.savedRequest")}</label>
             <select
               className={inputCls}
               value={selectedCollection}
               onChange={(e) => handleCollectionSelect(e.target.value)}
             >
-              <option value="">— pick a request —</option>
+              <option value="">{t("load.savedRequest.placeholder")}</option>
               {allRequests.map((r) => (
                 <option key={r.id} value={r.id}>
                   [{r.method}] {r.collectionName} / {r.name}
@@ -209,7 +212,7 @@ export function LoadWorkspacePanel({ collections, onToast }: Props) {
         {/* VU + Duration */}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className={labelCls}>Virtual users</label>
+            <label className={labelCls}>{t("load.virtualUsers")}</label>
             <select
               className={inputCls}
               value={cfg.virtualUsers}
@@ -221,7 +224,7 @@ export function LoadWorkspacePanel({ collections, onToast }: Props) {
             </select>
           </div>
           <div>
-            <label className={labelCls}>Duration</label>
+            <label className={labelCls}>{t("load.duration")}</label>
             <select
               className={inputCls}
               value={cfg.durationSeconds}
@@ -243,13 +246,13 @@ export function LoadWorkspacePanel({ collections, onToast }: Props) {
           >
             <span className="flex items-center gap-1.5">
               {showAdvanced ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-              <span className="text-[10px] uppercase tracking-widest text-neutral-500">Advanced</span>
+              <span className="text-[10px] uppercase tracking-widest text-neutral-500">{t("load.advanced")}</span>
             </span>
           </button>
           {showAdvanced && (
             <div className="border-t border-white/[0.06] px-3 pb-3 pt-2 space-y-3">
               <div>
-                <label className={labelCls}>Ramp-up (s)</label>
+                <label className={labelCls}>{t("load.rampUp")}</label>
                 <input
                   type="number"
                   min={0}
@@ -260,7 +263,7 @@ export function LoadWorkspacePanel({ collections, onToast }: Props) {
                 />
               </div>
               <div>
-                <label className={labelCls}>Think time (ms)</label>
+                <label className={labelCls}>{t("load.thinkTime")}</label>
                 <input
                   type="number"
                   min={0}
@@ -282,9 +285,9 @@ export function LoadWorkspacePanel({ collections, onToast }: Props) {
           className="flex items-center justify-center gap-2 rounded-lg bg-orange-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-orange-500 disabled:opacity-40"
         >
           {busy ? (
-            <><Loader2 className="h-4 w-4 animate-spin" /> Running…</>
+            <><Loader2 className="h-4 w-4 animate-spin" /> {t("load.running")}</>
           ) : (
-            <><Play className="h-4 w-4" /> Start Load Test</>
+            <><Play className="h-4 w-4" /> {t("load.start")}</>
           )}
         </button>
 
@@ -295,7 +298,7 @@ export function LoadWorkspacePanel({ collections, onToast }: Props) {
             onClick={() => { setResult(null); setError(null); }}
             className="flex items-center justify-center gap-1.5 text-xs text-neutral-500 hover:text-neutral-300 transition"
           >
-            <RefreshCw className="h-3.5 w-3.5" /> Reset
+            <RefreshCw className="h-3.5 w-3.5" /> {t("load.reset")}
           </button>
         )}
       </div>
@@ -312,7 +315,7 @@ export function LoadWorkspacePanel({ collections, onToast }: Props) {
           <div className="flex h-full items-center justify-center text-neutral-500">
             <div className="text-center">
               <Loader2 className="mx-auto h-8 w-8 animate-spin text-orange-500 mb-3" />
-              <p className="text-sm">Running load test…</p>
+              <p className="text-sm">{t("load.running")}</p>
               <p className="text-xs mt-1 text-neutral-600">
                 {cfg.virtualUsers} VUs × {cfg.durationSeconds}s
               </p>
@@ -324,8 +327,8 @@ export function LoadWorkspacePanel({ collections, onToast }: Props) {
           <div className="flex h-full items-center justify-center text-neutral-500">
             <div className="text-center">
               <BarChart3 className="mx-auto h-12 w-12 text-neutral-700 mb-4" />
-              <p className="text-sm font-medium text-neutral-400">No results yet</p>
-              <p className="text-xs mt-1">Configure a target URL and start a test</p>
+              <p className="text-sm font-medium text-neutral-400">{t("load.empty.title")}</p>
+              <p className="text-xs mt-1">{t("load.empty.description")}</p>
             </div>
           </div>
         )}
@@ -335,7 +338,7 @@ export function LoadWorkspacePanel({ collections, onToast }: Props) {
           <div className="mb-4">
             <div className="mb-2 flex items-center gap-1.5">
               <Clock className="h-3 w-3 text-neutral-500" />
-              <span className="text-[10px] uppercase tracking-widest text-neutral-500">Recent Runs</span>
+              <span className="text-[10px] uppercase tracking-widest text-neutral-500">{t("load.recentRuns")}</span>
             </div>
             <div className="flex gap-2 overflow-x-auto pb-1">
               {savedResults.slice(0, 8).map((r) => (
@@ -363,23 +366,23 @@ export function LoadWorkspacePanel({ collections, onToast }: Props) {
           <div className="space-y-4">
             <div className="flex items-center gap-2 text-xs text-neutral-500">
               <Clock className="h-3.5 w-3.5" />
-              <span>Saved run · {new Date(selectedSaved.started_at * 1000).toLocaleString()}</span>
+              <span>{t("load.savedRun")} · {new Date(selectedSaved.started_at * 1000).toLocaleString()}</span>
               <span className="ml-auto font-mono text-neutral-600 truncate max-w-xs">{selectedSaved.method} {selectedSaved.url}</span>
             </div>
             <div className="grid grid-cols-4 gap-3">
-              <MetricCard label="Total Requests" value={selectedSaved.total_requests.toLocaleString()} />
-              <MetricCard label="RPS" value={selectedSaved.requests_per_second.toFixed(1)} accent="text-orange-400" />
-              <MetricCard label="Successful" value={selectedSaved.successful.toLocaleString()} accent="text-emerald-400" />
-              <MetricCard label="Failed" value={selectedSaved.failed.toLocaleString()} accent={selectedSaved.failed > 0 ? "text-rose-400" : "text-neutral-400"} />
+              <MetricCard label={t("load.metric.totalRequests")} value={selectedSaved.total_requests.toLocaleString()} />
+              <MetricCard label={t("load.metric.rps")} value={selectedSaved.requests_per_second.toFixed(1)} accent="text-orange-400" />
+              <MetricCard label={t("load.metric.successful")} value={selectedSaved.successful.toLocaleString()} accent="text-emerald-400" />
+              <MetricCard label={t("load.metric.failed")} value={selectedSaved.failed.toLocaleString()} accent={selectedSaved.failed > 0 ? "text-rose-400" : "text-neutral-400"} />
             </div>
             <div className="grid grid-cols-3 gap-3">
-              <MetricCard label="Avg Latency" value={`${selectedSaved.avg_latency_ms.toFixed(0)}ms`} />
-              <MetricCard label="p95" value={`${selectedSaved.p95_ms.toFixed(0)}ms`} accent={selectedSaved.p95_ms > 1000 ? "text-amber-400" : undefined} />
-              <MetricCard label="p99" value={`${selectedSaved.p99_ms.toFixed(0)}ms`} accent={selectedSaved.p99_ms > 2000 ? "text-rose-400" : undefined} />
+              <MetricCard label={t("load.metric.avgLatency")} value={`${selectedSaved.avg_latency_ms.toFixed(0)}ms`} />
+              <MetricCard label={t("load.metric.p95")} value={`${selectedSaved.p95_ms.toFixed(0)}ms`} accent={selectedSaved.p95_ms > 1000 ? "text-amber-400" : undefined} />
+              <MetricCard label={t("load.metric.p99")} value={`${selectedSaved.p99_ms.toFixed(0)}ms`} accent={selectedSaved.p99_ms > 2000 ? "text-rose-400" : undefined} />
             </div>
             {Object.keys(selectedSaved.errors).length > 0 && (
               <div className="rounded-lg border border-rose-800/30 bg-rose-950/10 p-3">
-                <div className="mb-2 text-[10px] uppercase tracking-widest text-rose-500">Errors</div>
+                <div className="mb-2 text-[10px] uppercase tracking-widest text-rose-500">{t("load.errors")}</div>
                 {Object.entries(selectedSaved.errors).map(([err, count]) => (
                   <div key={err} className="flex justify-between text-xs py-0.5">
                     <span className="text-rose-400">{err}</span>
@@ -395,25 +398,25 @@ export function LoadWorkspacePanel({ collections, onToast }: Props) {
           <div className="space-y-4">
             {/* Summary grid */}
             <div className="grid grid-cols-4 gap-3">
-              <MetricCard label="Total Requests" value={result.total_requests.toLocaleString()} />
-              <MetricCard label="RPS" value={result.requests_per_second.toFixed(1)} accent="text-orange-400" />
-              <MetricCard label="Successful" value={result.successful.toLocaleString()} accent="text-emerald-400" />
+              <MetricCard label={t("load.metric.totalRequests")} value={result.total_requests.toLocaleString()} />
+              <MetricCard label={t("load.metric.rps")} value={result.requests_per_second.toFixed(1)} accent="text-orange-400" />
+              <MetricCard label={t("load.metric.successful")} value={result.successful.toLocaleString()} accent="text-emerald-400" />
               <MetricCard
-                label="Failed"
+                label={t("load.metric.failed")}
                 value={result.failed.toLocaleString()}
                 accent={result.failed > 0 ? "text-rose-400" : "text-neutral-400"}
               />
             </div>
             <div className="grid grid-cols-4 gap-3">
-              <MetricCard label="Avg Latency" value={`${result.avg_latency_ms.toFixed(0)}ms`} />
-              <MetricCard label="p50" value={`${result.p50_ms.toFixed(0)}ms`} />
-              <MetricCard label="p95" value={`${result.p95_ms.toFixed(0)}ms`} accent={result.p95_ms > 1000 ? "text-amber-400" : undefined} />
-              <MetricCard label="p99" value={`${result.p99_ms.toFixed(0)}ms`} accent={result.p99_ms > 2000 ? "text-rose-400" : undefined} />
+              <MetricCard label={t("load.metric.avgLatency")} value={`${result.avg_latency_ms.toFixed(0)}ms`} />
+              <MetricCard label={t("load.metric.p50")} value={`${result.p50_ms.toFixed(0)}ms`} />
+              <MetricCard label={t("load.metric.p95")} value={`${result.p95_ms.toFixed(0)}ms`} accent={result.p95_ms > 1000 ? "text-amber-400" : undefined} />
+              <MetricCard label={t("load.metric.p99")} value={`${result.p99_ms.toFixed(0)}ms`} accent={result.p99_ms > 2000 ? "text-rose-400" : undefined} />
             </div>
             <div className="grid grid-cols-3 gap-3">
-              <MetricCard label="Min" value={`${result.min_latency_ms.toFixed(0)}ms`} />
-              <MetricCard label="Max" value={`${result.max_latency_ms.toFixed(0)}ms`} />
-              <MetricCard label="Duration" value={`${result.duration_seconds.toFixed(1)}s`} />
+              <MetricCard label={t("load.metric.min")} value={`${result.min_latency_ms.toFixed(0)}ms`} />
+              <MetricCard label={t("load.metric.max")} value={`${result.max_latency_ms.toFixed(0)}ms`} />
+              <MetricCard label={t("load.metric.duration")} value={`${result.duration_seconds.toFixed(1)}s`} />
             </div>
 
             {/* Timeline */}
@@ -422,7 +425,7 @@ export function LoadWorkspacePanel({ collections, onToast }: Props) {
             {/* Errors */}
             {Object.keys(result.errors).length > 0 && (
               <div className="rounded-lg border border-rose-800/30 bg-rose-950/10 p-3">
-                <div className="mb-2 text-[10px] uppercase tracking-widest text-rose-500">Errors</div>
+                <div className="mb-2 text-[10px] uppercase tracking-widest text-rose-500">{t("load.errors")}</div>
                 {Object.entries(result.errors).map(([err, count]) => (
                   <div key={err} className="flex justify-between text-xs py-0.5">
                     <span className="text-rose-400">{err}</span>

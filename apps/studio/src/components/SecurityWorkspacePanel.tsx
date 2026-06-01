@@ -19,6 +19,7 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { sidecar, type OWASPFinding, type OWASPScanInput, type OWASPScanOutput, type SavedSecurityScan, type StoredCollection } from "../lib/sidecar";
 import { InterceptModal } from "./InterceptModal";
+import { useT } from "../lib/i18n/context";
 
 interface Props {
   collections: StoredCollection[];
@@ -59,16 +60,18 @@ function SeverityBadge({ severity }: { severity: SeverityLevel }) {
 }
 
 function ScoreRing({ score }: { score: number }) {
+  const t = useT();
   const color = score >= 80 ? "text-emerald-400" : score >= 50 ? "text-amber-400" : "text-rose-400";
   return (
     <div className="flex flex-col items-center gap-1">
       <div className={`text-4xl font-bold tabular-nums ${color}`}>{score}</div>
-      <div className="text-[10px] uppercase tracking-widest text-neutral-500">Security Score</div>
+      <div className="text-[10px] uppercase tracking-widest text-neutral-500">{t("security.score")}</div>
     </div>
   );
 }
 
 export function SecurityWorkspacePanel({ collections, onToast, onSendToRequest }: Props) {
+  const t = useT();
   const [url, setUrl] = useState("");
   const [params, setParams] = useState("");
   const [scanTypes, setScanTypes] = useState<OWASPScanType[]>(["sql_injection", "xss", "auth_bypass", "rate_limit"]);
@@ -139,14 +142,14 @@ export function SecurityWorkspacePanel({ collections, onToast, onSendToRequest }
       sidecar.listSavedSecurityScans().then(setSavedScans).catch(() => {});
       const critHigh = res.findings.filter((f) => f.severity === "critical" || f.severity === "high").length;
       if (critHigh > 0) {
-        onToast?.("error", `Security scan: ${critHigh} critical/high finding${critHigh !== 1 ? "s" : ""}`);
+        onToast?.("error", t("security.toast.critHigh", { n: critHigh, s: critHigh !== 1 ? "s" : "" }));
       } else {
-        onToast?.("success", `Security scan complete — score ${res.score}/100`);
+        onToast?.("success", t("security.toast.complete", { score: res.score }));
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
-      onToast?.("error", `Scan failed: ${msg}`);
+      onToast?.("error", t("security.toast.failed", { msg }));
     } finally {
       setBusy(false);
     }
@@ -172,11 +175,11 @@ export function SecurityWorkspacePanel({ collections, onToast, onSendToRequest }
       <div className="flex w-80 shrink-0 flex-col overflow-y-auto border-r border-white/[0.06] bg-neutral-925/90 p-4 gap-4">
         <div className="flex items-center gap-2">
           <Shield className="h-4 w-4 text-red-500" />
-          <span className="text-sm font-semibold text-neutral-100">Security Scan</span>
+          <span className="text-sm font-semibold text-neutral-100">{t("security.header")}</span>
         </div>
 
         <div>
-          <label className={labelCls}>Target URL</label>
+          <label className={labelCls}>{t("security.targetUrl")}</label>
           <input
             type="url"
             className={inputCls}
@@ -189,13 +192,13 @@ export function SecurityWorkspacePanel({ collections, onToast, onSendToRequest }
 
         {allRequests.length > 0 && (
           <div>
-            <label className={labelCls}>Or use saved request</label>
+            <label className={labelCls}>{t("security.savedRequest")}</label>
             <select
               className={inputCls}
               value={selectedCollection}
               onChange={(e) => handleCollectionSelect(e.target.value)}
             >
-              <option value="">— pick a request —</option>
+              <option value="">{t("security.savedRequest.placeholder")}</option>
               {allRequests.map((r) => (
                 <option key={r.id} value={r.id}>
                   [{r.method}] {r.collectionName} / {r.name}
@@ -206,7 +209,7 @@ export function SecurityWorkspacePanel({ collections, onToast, onSendToRequest }
         )}
 
         <div>
-          <label className={labelCls}>Query params (key=value&amp;...)</label>
+          <label className={labelCls}>{t("security.queryParams")}</label>
           <input
             type="text"
             className={inputCls}
@@ -216,12 +219,12 @@ export function SecurityWorkspacePanel({ collections, onToast, onSendToRequest }
             spellCheck={false}
           />
           <p className="mt-1 text-[10px] text-neutral-600">
-            Params to inject payloads into
+            {t("security.queryParams.hint")}
           </p>
         </div>
 
         <div>
-          <label className={labelCls}>Scan types</label>
+          <label className={labelCls}>{t("security.scanTypes")}</label>
           <div className="space-y-1.5">
             {(Object.keys(SCAN_TYPE_LABELS) as OWASPScanType[]).map((t) => (
               <label key={t} className="flex items-center gap-2 cursor-pointer text-xs text-neutral-300">
@@ -244,9 +247,9 @@ export function SecurityWorkspacePanel({ collections, onToast, onSendToRequest }
           className="flex items-center justify-center gap-2 rounded-lg bg-red-700 px-4 py-2 text-xs font-semibold text-white transition hover:bg-red-600 disabled:opacity-40"
         >
           {busy ? (
-            <><Loader2 className="h-4 w-4 animate-spin" /> Scanning…</>
+            <><Loader2 className="h-4 w-4 animate-spin" /> {t("security.scanning")}</>
           ) : (
-            <><ShieldAlert className="h-4 w-4" /> Run Scan</>
+            <><ShieldAlert className="h-4 w-4" /> {t("security.run")}</>
           )}
         </button>
 
@@ -256,7 +259,7 @@ export function SecurityWorkspacePanel({ collections, onToast, onSendToRequest }
             onClick={() => { setResult(null); setError(null); }}
             className="flex items-center justify-center gap-1.5 text-xs text-neutral-500 hover:text-neutral-300 transition"
           >
-            <RefreshCw className="h-3.5 w-3.5" /> Reset
+            <RefreshCw className="h-3.5 w-3.5" /> {t("security.reset")}
           </button>
         )}
 
@@ -268,10 +271,10 @@ export function SecurityWorkspacePanel({ collections, onToast, onSendToRequest }
             className="flex w-full items-center justify-center gap-2 rounded-lg border border-white/[0.08] bg-neutral-900/50 px-3 py-2 text-xs text-neutral-400 transition hover:bg-neutral-800/50 hover:text-neutral-200"
           >
             <Shield className="h-3.5 w-3.5" />
-            Open Interceptor
+            {t("security.interceptor.open")}
           </button>
           <p className="mt-1 text-center text-[10px] text-neutral-600">
-            Capture &amp; inspect live traffic
+            {t("security.interceptor.hint")}
           </p>
         </div>
       </div>
@@ -288,7 +291,7 @@ export function SecurityWorkspacePanel({ collections, onToast, onSendToRequest }
           <div className="flex h-full items-center justify-center text-neutral-500">
             <div className="text-center">
               <Loader2 className="mx-auto h-8 w-8 animate-spin text-red-500 mb-3" />
-              <p className="text-sm">Running security scan…</p>
+              <p className="text-sm">{t("security.scanning")}</p>
             </div>
           </div>
         )}
@@ -297,8 +300,8 @@ export function SecurityWorkspacePanel({ collections, onToast, onSendToRequest }
           <div className="flex h-full items-center justify-center text-neutral-500">
             <div className="text-center">
               <Shield className="mx-auto h-12 w-12 text-neutral-700 mb-4" />
-              <p className="text-sm font-medium text-neutral-400">No results yet</p>
-              <p className="text-xs mt-1">Configure a target URL and run a scan</p>
+              <p className="text-sm font-medium text-neutral-400">{t("security.empty.title")}</p>
+              <p className="text-xs mt-1">{t("security.empty.description")}</p>
             </div>
           </div>
         )}
@@ -308,7 +311,7 @@ export function SecurityWorkspacePanel({ collections, onToast, onSendToRequest }
           <div className="mb-4">
             <div className="mb-2 flex items-center gap-1.5">
               <Clock className="h-3 w-3 text-neutral-500" />
-              <span className="text-[10px] uppercase tracking-widest text-neutral-500">Recent Scans</span>
+              <span className="text-[10px] uppercase tracking-widest text-neutral-500">{t("security.recentScans")}</span>
             </div>
             <div className="flex gap-2 overflow-x-auto pb-1">
               {savedScans.slice(0, 6).map((s) => {
@@ -343,7 +346,7 @@ export function SecurityWorkspacePanel({ collections, onToast, onSendToRequest }
           <div className="space-y-4">
             <div className="flex items-center gap-2 text-xs text-neutral-500">
               <Clock className="h-3.5 w-3.5" />
-              <span>Saved scan · {new Date(selectedSaved.started_at * 1000).toLocaleString()}</span>
+              <span>{t("security.savedScan")} · {new Date(selectedSaved.started_at * 1000).toLocaleString()}</span>
               <span className="ml-auto font-mono text-neutral-600 truncate max-w-xs">{selectedSaved.url}</span>
             </div>
             <div className="flex items-start gap-4 rounded-lg border border-white/[0.06] bg-neutral-900/40 p-4">
@@ -351,8 +354,8 @@ export function SecurityWorkspacePanel({ collections, onToast, onSendToRequest }
               <div className="flex-1 space-y-1">
                 <div className="text-sm font-medium text-neutral-200">
                   {selectedSaved.findings.length === 0
-                    ? "No findings — target looks clean"
-                    : `${selectedSaved.findings.length} finding${selectedSaved.findings.length !== 1 ? "s" : ""} detected`}
+                    ? t("security.noFindings")
+                    : `${selectedSaved.findings.length} ${selectedSaved.findings.length !== 1 ? t("security.findings") : t("security.finding")} detected`}
                 </div>
                 <div className="flex flex-wrap gap-1.5 mt-2">
                   {selectedSaved.scan_types_run.map((t) => (
@@ -361,7 +364,7 @@ export function SecurityWorkspacePanel({ collections, onToast, onSendToRequest }
                     </span>
                   ))}
                 </div>
-                <div className="text-[10px] text-neutral-600 mt-1">Elapsed: {selectedSaved.elapsed_ms.toFixed(0)}ms</div>
+                <div className="text-[10px] text-neutral-600 mt-1">{t("security.elapsed", { ms: selectedSaved.elapsed_ms.toFixed(0) })}</div>
               </div>
             </div>
             {selectedSaved.findings.length > 0 && (
@@ -376,7 +379,7 @@ export function SecurityWorkspacePanel({ collections, onToast, onSendToRequest }
             {selectedSaved.findings.length === 0 && (
               <div className="flex items-center gap-2 rounded-lg border border-emerald-800/30 bg-emerald-950/10 px-4 py-3 text-sm text-emerald-400">
                 <CheckCircle className="h-4 w-4 shrink-0" />
-                No vulnerabilities detected for selected scan types
+                {t("security.noVulnerabilities")}
               </div>
             )}
           </div>
@@ -390,8 +393,8 @@ export function SecurityWorkspacePanel({ collections, onToast, onSendToRequest }
               <div className="flex-1 space-y-1">
                 <div className="text-sm font-medium text-neutral-200">
                   {result.findings.length === 0
-                    ? "No findings — target looks clean"
-                    : `${result.findings.length} finding${result.findings.length !== 1 ? "s" : ""} detected`}
+                    ? t("security.noFindings")
+                    : `${result.findings.length} ${result.findings.length !== 1 ? t("security.findings") : t("security.finding")} detected`}
                 </div>
                 <div className="flex flex-wrap gap-1.5 mt-2">
                   {result.scan_types_run.map((t) => (
@@ -401,7 +404,7 @@ export function SecurityWorkspacePanel({ collections, onToast, onSendToRequest }
                   ))}
                 </div>
                 <div className="text-[10px] text-neutral-600 mt-1">
-                  Elapsed: {result.elapsed_ms.toFixed(0)}ms
+                  {t("security.elapsed", { ms: result.elapsed_ms.toFixed(0) })}
                 </div>
               </div>
             </div>
@@ -426,7 +429,7 @@ export function SecurityWorkspacePanel({ collections, onToast, onSendToRequest }
             {result.findings.length === 0 && (
               <div className="flex items-center gap-2 rounded-lg border border-emerald-800/30 bg-emerald-950/10 px-4 py-3 text-sm text-emerald-400">
                 <CheckCircle className="h-4 w-4 shrink-0" />
-                No vulnerabilities detected for selected scan types
+                {t("security.noVulnerabilities")}
               </div>
             )}
           </div>
@@ -450,6 +453,7 @@ function FindingCard({
   finding: OWASPFinding;
   onSendToRequest?: () => void;
 }) {
+  const t = useT();
   const [expanded, setExpanded] = useState(false);
   return (
     <div className="rounded-lg border border-white/[0.06] bg-neutral-900/40 overflow-hidden">
@@ -479,7 +483,7 @@ function FindingCard({
               onClick={onSendToRequest}
               className="flex items-center gap-1.5 text-[10px] text-cobweb-400 hover:text-cobweb-300 transition"
             >
-              <Play className="h-3 w-3" /> Send to Request panel
+              <Play className="h-3 w-3" /> {t("intercept.sendToRequest")}
             </button>
           )}
         </div>
